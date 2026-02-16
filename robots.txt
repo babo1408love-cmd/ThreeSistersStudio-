@@ -1,3 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://mongglebell.vercel.app/sitemap.xml
