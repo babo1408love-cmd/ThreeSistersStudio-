@@ -4,10 +4,10 @@
   "builds": [
     { "src": "index.html", "use": "@vercel/static" }
   ],
-  "routes": [
-    { "src": "/manifest.json", "dest": "/manifest.json" },
-    { "src": "/sw.js", "dest": "/sw.js" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "rewrites": [
+    { "source": "/manifest.json", "destination": "/manifest.json" },
+    { "source": "/sw.js", "destination": "/sw.js" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
