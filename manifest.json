@@ -1,0 +1,30 @@
+{
+  "name": "몽글벨 — 세자매와 함께하는 판타지 RPG",
+  "short_name": "몽글벨",
+  "description": "AI 세자매와 무한 성장하는 판타지 RPG 어드벤처",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#050510",
+  "background_color": "#050510",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["games", "entertainment"]
+}
