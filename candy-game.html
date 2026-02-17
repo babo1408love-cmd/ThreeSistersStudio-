@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🍬 캔디 매치 - 몽글벨</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a18;color:#fff;font-family:'Noto Sans KR',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.4)}100%{transform:scale(0);opacity:0}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+@keyframes glow{0%{box-shadow:0 0 5px rgba(245,194,231,.3)}100%{box-shadow:0 0 20px rgba(245,194,231,.6)}}
+.game{text-align:center;animation:fadeIn .5s ease-out}
+.title{font-size:1.4em;color:#f5c2e7;font-weight:700;margin-bottom:6px}
+.subtitle{font-size:.45em;color:#8e92b8;margin-bottom:12px}
+.info{font-size:.55em;color:#fbbf24;margin-bottom:10px;min-height:20px}
+.grid{display:inline-grid;gap:4px;justify-content:center;margin-bottom:16px}
+.cell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;border-radius:10px;background:rgba(20,20,35,.8);border:2px solid rgba(80,80,120,.3);transition:all .15s;user-select:none}
+.cell:hover{background:rgba(40,40,60,.8);border-color:rgba(245,194,231,.4)}
+.cell:active{transform:scale(.9)}
+.cell.selected{background:rgba(245,194,231,.2);border-color:#f5c2e7;animation:glow 1s ease-in-out infinite alternate}
+.cell.matched{animation:pop .4s forwards}
+.progress-bar{width:80%;max-width:280px;height:8px;background:#1a1a2e;border-radius:4px;margin:0 auto 14px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,#f5c2e7,#c084fc);border-radius:4px;transition:width .3s}
+.btn{padding:12px 28px;border:none;border-radius:12px;font-size:.6em;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif}
+.btn-primary{background:linear-gradient(135deg,#f5c2e7,#c084fc);color:#0a0a0f;box-shadow:0 4px 15px rgba(245,194,231,.3)}
+.btn-secondary{background:rgba(30,30,50,.8);border:1px solid #f5c2e744;color:#f5c2e7;margin-top:10px}
+.combo-text{position:fixed;top:20%;left:50%;transform:translateX(-50%);font-size:1.5em;color:#fbbf24;font-weight:700;animation:pop .6s forwards;pointer-events:none}
+.score-float{position:fixed;font-size:1em;color:#86efac;font-weight:700;animation:pop .5s forwards;pointer-events:none;z-index:10}
+</style>
+</head>
+<body>
+<div class="game" id="gameArea">
+    <div class="title">🍬 캔디 매치!</div>
+    <div class="subtitle">인접한 보석을 스왑해서 3개 이상 맞추세요!</div>
+    <div class="info" id="info">🍬 점수: 0 | 남은 이동: 20 | 콤보: 0</div>
+    <div class="progress-bar"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+    <div class="grid" id="grid" style="grid-template-columns:repeat(6,44px)"></div>
+    <button class="btn btn-secondary" onclick="resetGame()">🔄 다시 하기</button>
+</div>
+
+<script>
+var gems = ['🧚','🍄','💎','⭐','🌈','🍬'];
+var boardSize = 6;
+var board = [];
+var selected = null;
+var moves = 20;
+var score = 0;
+var comboCount = 0;
+var totalCombo = 0;
+var isProcessing = false;
+
+function init() {
+    board = [];
+    for (var r = 0; r < boardSize; r++) {
+        board[r] = [];
+        for (var c = 0; c < boardSize; c++) {
+            board[r][c] = Math.floor(Math.random() * gems.length);
+        }
+    }
+    selected = null; moves = 20; score = 0; comboCount = 0; totalCombo = 0; isProcessing = false;
+    // 초기 매치 제거
+    removeInitialMatches();
+    render();
+}
+
+function removeInitialMatches() {
+    var changed = true;
+    while (changed) {
+        changed = false;
+        for (var r = 0; r < boardSize; r++) {
+            for (var c = 0; c < boardSize; c++) {
+                // 가로 체크
+                if (c < boardSize - 2 && board[r][c] === board[r][c+1] && board[r][c+1] === board[r][c+2]) {
+                    board[r][c] = (board[r][c] + 1 + Math.floor(Math.random() * (gems.length-1))) % gems.length;
+                    changed = true;
+                }
+                // 세로 체크
+                if (r < boardSize - 2 && board[r][c] === board[r+1][c] && board[r+1][c] === board[r+2][c]) {
+                    board[r][c] = (board[r][c] + 1 + Math.floor(Math.random() * (gems.length-1))) % gems.length;
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+function render() {
+    var grid = document.getElementById('grid');
+    grid.style.gridTemplateColumns = 'repeat(' + boardSize + ',44px)';
+    var html = '';
+    for (var r = 0; r < boardSize; r++) {
+        for (var c = 0; c < boardSize; c++) {
+            var sel = selected && selected[0] === r && selected[1] === c;
+            html += '<div class="cell' + (sel ? ' selected' : '') + '" onclick="cellClick(' + r + ',' + c + ')">' + gems[board[r][c]] + '</div>';
+        }
+    }
+    grid.innerHTML = html;
+    document.getElementById('info').textContent = '🍬 점수: ' + score + ' | 남은 이동: ' + moves + ' | 콤보: ' + totalCombo;
+    document.getElementById('progress').style.width = Math.min(100, score / 500 * 100) + '%';
+}
+
+function showCombo(count) {
+    if (count < 2) return;
+    var el = document.createElement('div');
+    el.className = 'combo-text';
+    el.textContent = '✨ ' + count + 'x 콤보!';
+    document.body.appendChild(el);
+    setTimeout(function() { el.remove(); }, 600);
+}
+
+function showScoreFloat(points) {
+    var el = document.createElement('div');
+    el.className = 'score-float';
+    el.style.left = (30 + Math.random() * 40) + '%';
+    el.style.top = (30 + Math.random() * 20) + '%';
+    el.textContent = '+' + points;
+    document.body.appendChild(el);
+    setTimeout(function() { el.remove(); }, 500);
+}
+
+function checkMatches() {
+    var matched = {};
+    // 가로
+    for (var r = 0; r < boardSize; r++) {
+        for (var c = 0; c < boardSize - 2; c++) {
+            if (board[r][c] === board[r][c+1] && board[r][c+1] === board[r][c+2]) {
+                matched[r+','+c] = true; matched[r+','+(c+1)] = true; matched[r+','+(c+2)] = true;
+                // 4매치 체크
+                if (c < boardSize - 3 && board[r][c] === board[r][c+3]) matched[r+','+(c+3)] = true;
+                // 5매치 체크
+                if (c < boardSize - 4 && board[r][c] === board[r][c+4]) matched[r+','+(c+4)] = true;
+            }
+        }
+    }
+    // 세로
+    for (var r2 = 0; r2 < boardSize - 2; r2++) {
+        for (var c2 = 0; c2 < boardSize; c2++) {
+            if (board[r2][c2] === board[r2+1][c2] && board[r2+1][c2] === board[r2+2][c2]) {
+                matched[r2+','+c2] = true; matched[(r2+1)+','+c2] = true; matched[(r2+2)+','+c2] = true;
+                if (r2 < boardSize - 3 && board[r2][c2] === board[r2+3][c2]) matched[(r2+3)+','+c2] = true;
+                if (r2 < boardSize - 4 && board[r2][c2] === board[r2+4][c2]) matched[(r2+4)+','+c2] = true;
+            }
+        }
+    }
+
+    var keys = Object.keys(matched);
+    if (keys.length > 0) {
+        comboCount++;
+        totalCombo = Math.max(totalCombo, comboCount);
+        var bonus = comboCount > 1 ? comboCount * 10 : 0;
+        var points = keys.length * 15 + bonus;
+        score += points;
+        showScoreFloat(points);
+        if (comboCount >= 2) showCombo(comboCount);
+
+        // 중력: 매치된 칸을 위에서 떨어뜨리기
+        keys.forEach(function(k) {
+            var parts = k.split(',');
+            var mr = parseInt(parts[0]), mc = parseInt(parts[1]);
+            // 위의 블록들을 아래로 이동
+            for (var row = mr; row > 0; row--) {
+                board[row][mc] = board[row-1][mc];
+            }
+            board[0][mc] = Math.floor(Math.random() * gems.length);
+        });
+
+        render();
+        setTimeout(function() { checkMatches(); }, 300);
+    } else {
+        comboCount = 0;
+        isProcessing = false;
+        render();
+        if (moves <= 0) {
+            document.getElementById('info').innerHTML = '🎉 게임 종료! 총 ' + score + '점! 최대 콤보: ' + totalCombo;
+        }
+    }
+}
+
+function cellClick(r, c) {
+    if (isProcessing || moves <= 0) return;
+    if (!selected) {
+        selected = [r, c];
+        render();
+        return;
+    }
+    var dr = Math.abs(selected[0] - r), dc = Math.abs(selected[1] - c);
+    if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
+        // 스왑
+        var tmp = board[selected[0]][selected[1]];
+        board[selected[0]][selected[1]] = board[r][c];
+        board[r][c] = tmp;
+        moves--;
+        selected = null;
+        isProcessing = true;
+        render();
+        setTimeout(function() { checkMatches(); }, 200);
+    } else {
+        selected = [r, c];
+        render();
+    }
+}
+
+function resetGame() { init(); }
+init();
+</script>
+</body>
+</html>

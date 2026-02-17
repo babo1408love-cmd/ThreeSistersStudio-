@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>몽글벨 - 정령과 함께하는 모험</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/isometric.css">
+  <link rel="stylesheet" href="css/scenes/main-menu.css">
+  <link rel="stylesheet" href="css/scenes/stage1-candy.css">
+  <link rel="stylesheet" href="css/scenes/stage1-marble.css">
+  <link rel="stylesheet" href="css/scenes/stage1-treasure.css">
+  <link rel="stylesheet" href="css/scenes/summoning-room.css">
+  <link rel="stylesheet" href="css/scenes/stage2-combat.css">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧚</text></svg>">
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Error display for debugging -->
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      var d = document.createElement('pre');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;padding:16px;z-index:9999;font-size:14px;white-space:pre-wrap;';
+      d.textContent = 'ERROR: ' + msg + '\nFile: ' + src + ':' + line + ':' + col + '\n' + (err && err.stack ? err.stack : '');
+      document.body.appendChild(d);
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      var d = document.createElement('pre');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;padding:16px;z-index:9999;font-size:14px;white-space:pre-wrap;';
+      d.textContent = 'PROMISE ERROR: ' + (e.reason && e.reason.stack ? e.reason.stack : e.reason);
+      document.body.appendChild(d);
+    });
+  </script>
+
+  <!-- JS Entry Point -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

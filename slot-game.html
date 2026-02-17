@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🎰 보상 슬롯 - 몽글벨</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a12;color:#fff;font-family:'Noto Sans KR',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{0%{transform:rotateX(0)}100%{transform:rotateX(360deg)}}
+@keyframes jackpot{0%{transform:scale(1);color:#fbbf24}25%{transform:scale(1.2);color:#ff6b6b}50%{transform:scale(1);color:#86efac}75%{transform:scale(1.2);color:#9b8aff}100%{transform:scale(1);color:#fbbf24}}
+@keyframes glow-pulse{0%{box-shadow:0 0 10px rgba(251,191,36,.3)}100%{box-shadow:0 0 30px rgba(251,191,36,.6)}}
+@keyframes confetti{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(100px) rotate(360deg)}}
+.game{text-align:center;animation:fadeIn .5s ease-out}
+.title{font-size:1.4em;color:#fbbf24;font-weight:700;margin-bottom:6px}
+.subtitle{font-size:.45em;color:#8e92b8;margin-bottom:16px}
+.info{font-size:.55em;color:#86efac;margin-bottom:14px}
+.reels{display:flex;gap:16px;justify-content:center;margin-bottom:24px}
+.reel{width:72px;height:72px;background:rgba(20,25,15,.9);border:3px solid #fbbf24;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:40px;transition:all .15s;animation:glow-pulse 2s ease-in-out infinite alternate}
+.reel.spinning{animation:spin .1s linear infinite}
+.btn{padding:14px 36px;border:none;border-radius:14px;font-size:.7em;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s}
+.btn:active{transform:scale(.95)}
+.btn-spin{background:linear-gradient(135deg,#fbbf24,#fb923c);color:#0a0a0f;box-shadow:0 4px 20px rgba(251,191,36,.4);margin-bottom:12px}
+.btn-spin:disabled{background:#333;color:#666;box-shadow:none;cursor:not-allowed}
+.btn-secondary{background:rgba(30,35,20,.8);border:1px solid #fbbf2444;color:#fbbf24;margin-top:10px;font-size:.5em;padding:10px 20px}
+.result{font-size:.6em;color:#fbbf24;margin-top:14px;min-height:60px}
+.jackpot-text{font-size:1.5em;font-weight:700;animation:jackpot 1s infinite}
+.history{margin-top:16px;font-size:.4em;color:#666}
+.history-item{display:inline-block;padding:3px 8px;background:rgba(40,40,30,.6);border-radius:6px;margin:2px}
+.confetti{position:fixed;font-size:20px;pointer-events:none;animation:confetti 2s forwards}
+</style>
+</head>
+<body>
+<div class="game" id="gameArea">
+    <div class="title">🎰 보상 슬롯!</div>
+    <div class="subtitle">슬롯을 돌려서 보상을 결정하세요!</div>
+    <div class="info" id="info">💰 총 획득: 0G | 남은 기회: 5</div>
+    <div class="reels">
+        <div class="reel" id="reel0">🧚</div>
+        <div class="reel" id="reel1">🧚</div>
+        <div class="reel" id="reel2">🧚</div>
+    </div>
+    <button class="btn btn-spin" id="spinBtn" onclick="spin()">🎰 돌려! (5번 남음)</button>
+    <div class="result" id="result"></div>
+    <div class="history" id="history"></div>
+    <button class="btn btn-secondary" onclick="resetGame()">🔄 다시 하기</button>
+</div>
+
+<script>
+var symbols = ['🧚','🍄','💎','⭐','🌈','🍬','🌙','💧'];
+var symbolNames = {'🧚':'요정','🍄':'버섯','💎':'다이아','⭐':'별','🌈':'무지개','🍬':'사탕','🌙':'달','💧':'물방울'};
+var spinning = false;
+var spins = 5;
+var totalGold = 0;
+var history = [];
+
+function spin() {
+    if (spinning || spins <= 0) return;
+    spinning = true;
+    spins--;
+    document.getElementById('spinBtn').textContent = '돌아가는 중...';
+    document.getElementById('spinBtn').disabled = true;
+    document.getElementById('result').textContent = '';
+
+    // 릴 애니메이션
+    for (var i = 0; i < 3; i++) {
+        document.getElementById('reel' + i).classList.add('spinning');
+    }
+
+    var count = 0;
+    var reels = [0, 0, 0];
+    var stopTimes = [12, 16, 20]; // 릴마다 다른 정지 시간
+
+    var si = setInterval(function() {
+        for (var i = 0; i < 3; i++) {
+            if (count < stopTimes[i]) {
+                reels[i] = Math.floor(Math.random() * symbols.length);
+                document.getElementById('reel' + i).textContent = symbols[reels[i]];
+            } else {
+                document.getElementById('reel' + i).classList.remove('spinning');
+            }
+        }
+        count++;
+
+        if (count > stopTimes[2]) {
+            clearInterval(si);
+            spinning = false;
+
+            // 결과 판정
+            var gold = 0;
+            var resultText = '';
+            var r0 = symbols[reels[0]], r1 = symbols[reels[1]], r2 = symbols[reels[2]];
+
+            if (reels[0] === reels[1] && reels[1] === reels[2]) {
+                // 잭팟!
+                gold = reels[0] === 2 ? 3000 : 1500; // 💎 잭팟은 특별
+                resultText = '<div class="jackpot-text">🎉🎉🎉 잭팟!!!</div><div>' + r0 + r0 + r0 + ' → +' + gold + 'G!</div>';
+                showConfetti();
+            } else if (reels[0] === reels[1] || reels[1] === reels[2] || reels[0] === reels[2]) {
+                gold = 300;
+                var matched = reels[0] === reels[1] ? r0 : reels[1] === reels[2] ? r1 : r0;
+                resultText = '✨ 2매치! ' + matched + matched + ' → +' + gold + 'G!';
+            } else {
+                gold = 50;
+                resultText = '🧚 기본 보상 → +' + gold + 'G';
+            }
+
+            totalGold += gold;
+            history.push(r0 + r1 + r2 + ' (+' + gold + 'G)');
+
+            document.getElementById('result').innerHTML = resultText;
+            document.getElementById('info').textContent = '💰 총 획득: ' + totalGold + 'G | 남은 기회: ' + spins;
+
+            // 히스토리 표시
+            var histHtml = history.map(function(h) { return '<span class="history-item">' + h + '</span>'; }).join('');
+            document.getElementById('history').innerHTML = histHtml;
+
+            if (spins > 0) {
+                document.getElementById('spinBtn').textContent = '🎰 돌려! (' + spins + '번 남음)';
+                document.getElementById('spinBtn').disabled = false;
+            } else {
+                document.getElementById('spinBtn').textContent = '🎰 기회 소진!';
+                document.getElementById('spinBtn').disabled = true;
+                document.getElementById('result').innerHTML += '<div style="margin-top:10px;font-size:1.1em;color:#86efac">🎉 최종 획득: ' + totalGold + 'G!</div>';
+            }
+        }
+    }, 60);
+}
+
+function showConfetti() {
+    var emojis = ['🎉','✨','⭐','💎','🌈','🎊'];
+    for (var i = 0; i < 20; i++) {
+        var el = document.createElement('div');
+        el.className = 'confetti';
+        el.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        el.style.left = Math.random() * 100 + '%';
+        el.style.top = '-20px';
+        el.style.animationDelay = (Math.random() * 0.5) + 's';
+        el.style.animationDuration = (1.5 + Math.random()) + 's';
+        document.body.appendChild(el);
+        setTimeout(function(e) { e.remove(); }.bind(null, el), 2500);
+    }
+}
+
+function resetGame() {
+    spins = 5; totalGold = 0; history = [];
+    document.getElementById('info').textContent = '💰 총 획득: 0G | 남은 기회: 5';
+    document.getElementById('spinBtn').textContent = '🎰 돌려! (5번 남음)';
+    document.getElementById('spinBtn').disabled = false;
+    document.getElementById('result').textContent = '';
+    document.getElementById('history').textContent = '';
+    for (var i = 0; i < 3; i++) document.getElementById('reel' + i).textContent = '🧚';
+}
+</script>
+</body>
+</html>

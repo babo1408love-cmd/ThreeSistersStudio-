@@ -1,0 +1,110 @@
+.summoning-scene {
+  text-align: center;
+}
+
+.summoning-scene .scene-title { color: var(--purple); }
+
+.summoning-tree {
+  position: relative;
+  width: 200px;
+  height: 240px;
+  margin: var(--gap-md) auto;
+  font-size: 120px;
+  line-height: 240px;
+  filter: drop-shadow(0 0 20px rgba(192, 132, 252, 0.4));
+}
+
+.summoning-tree.active {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.spirit-slots {
+  display: flex;
+  gap: var(--gap-sm);
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: var(--gap-md) auto;
+  max-width: 360px;
+}
+
+.spirit-slot {
+  width: 64px;
+  height: 64px;
+  background: var(--bg-card);
+  border: 2px dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  transition: all var(--transition-fast);
+}
+
+.spirit-slot.filled {
+  border-style: solid;
+  border-color: var(--purple);
+}
+
+.summon-reveal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 600;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.summon-reveal__spirit {
+  font-size: 100px;
+  animation: summonReveal 1s ease-out;
+}
+
+@keyframes summonReveal {
+  0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+  60%  { transform: scale(1.3) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+.summon-reveal__name {
+  font-size: 1.5em;
+  font-weight: 700;
+  color: var(--purple);
+  margin-top: var(--gap-md);
+  animation: slideUp 0.5s ease-out 0.5s both;
+}
+
+.summon-reveal__stats {
+  color: var(--text-secondary);
+  margin-top: var(--gap-sm);
+  animation: slideUp 0.5s ease-out 0.7s both;
+}
+
+.spirit-items-list {
+  display: flex;
+  gap: var(--gap-sm);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: var(--gap-sm) 0;
+}
+
+.spirit-item {
+  padding: 6px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.spirit-item:hover {
+  border-color: var(--purple);
+}
+
+.spirit-item.insufficient {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

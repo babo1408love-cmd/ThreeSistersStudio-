@@ -1,0 +1,52 @@
+:root {
+  /* Colors - Dark Theme */
+  --bg-primary: #0a0a18;
+  --bg-secondary: #141428;
+  --bg-card: rgba(20, 20, 35, 0.8);
+  --bg-overlay: rgba(0, 0, 0, 0.7);
+
+  /* Accent Colors */
+  --pink: #f5c2e7;
+  --purple: #c084fc;
+  --blue: #9b8aff;
+  --gold: #fbbf24;
+  --green: #86efac;
+  --red: #ff6b6b;
+  --orange: #fb923c;
+  --cyan: #67e8f9;
+
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: #8e92b8;
+  --text-muted: #555577;
+
+  /* Borders */
+  --border-subtle: rgba(80, 80, 120, 0.3);
+  --border-glow: rgba(245, 194, 231, 0.4);
+
+  /* Spacing */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 16px;
+  --gap-lg: 24px;
+  --gap-xl: 32px;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-round: 50%;
+
+  /* Shadows */
+  --shadow-glow-pink: 0 4px 15px rgba(245, 194, 231, 0.3);
+  --shadow-glow-purple: 0 4px 15px rgba(192, 132, 252, 0.3);
+  --shadow-glow-gold: 0 4px 20px rgba(251, 191, 36, 0.4);
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+
+  /* Font */
+  --font-main: 'Noto Sans KR', sans-serif;
+}

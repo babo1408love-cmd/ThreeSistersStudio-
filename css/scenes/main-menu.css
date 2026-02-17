@@ -1,0 +1,66 @@
+.main-menu {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gap-md);
+}
+
+.main-menu__logo {
+  margin-bottom: var(--gap-xs);
+}
+
+.main-menu__title {
+  font-size: 2.5em;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--pink), var(--purple), var(--blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.main-menu__subtitle {
+  font-size: 1em;
+  color: var(--text-secondary);
+  margin-bottom: var(--gap-lg);
+}
+
+.main-menu__buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  width: 240px;
+}
+
+.main-menu__buttons .btn {
+  width: 100%;
+  font-size: 1.1em;
+}
+
+.main-menu__version {
+  margin-top: var(--gap-xl);
+  font-size: 0.75em;
+  color: var(--text-muted);
+}
+
+.main-menu__particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.particle {
+  position: absolute;
+  font-size: 1.5em;
+  opacity: 0.15;
+  animation: particleDrift linear infinite;
+}
+
+@keyframes particleDrift {
+  0%   { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+  10%  { opacity: 0.15; }
+  90%  { opacity: 0.15; }
+  100% { transform: translateY(-10vh) rotate(360deg); opacity: 0; }
+}
