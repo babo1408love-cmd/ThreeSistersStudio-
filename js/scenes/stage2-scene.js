@@ -33,6 +33,10 @@ export default class Stage2Scene {
     const controlBar = document.createElement('div');
     controlBar.className = 'combat-control-bar';
     controlBar.innerHTML = `
+      <button class="combat-ctrl-btn" id="btn-back-menu">
+        <span class="combat-ctrl-icon">←</span>
+        <span class="combat-ctrl-label">메뉴</span>
+      </button>
       <button class="combat-ctrl-btn" id="btn-summon-tree">
         <span class="combat-ctrl-icon">🌳</span>
         <span class="combat-ctrl-label">소환나무</span>
@@ -48,6 +52,11 @@ export default class Stage2Scene {
     this.el.appendChild(controlBar);
 
     // Bind controls
+    controlBar.querySelector('#btn-back-menu').onclick = () => {
+      if (this._engine) this._engine.running = false;
+      SaveManager.save();
+      SceneManager.go('menu');
+    };
     controlBar.querySelector('#btn-summon-tree').onclick = () => this._showSummonTree();
     controlBar.querySelector('#btn-pause').onclick = () => this._togglePause();
 
