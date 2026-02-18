@@ -89,6 +89,9 @@ export default class CandyMatch {
       this._tileTarget = getTileTarget(GameState.currentStage);
     }
 
+    // 컴팩트 모드 (통합 스테이지1: 큰 타일, 마블/장비 분리)
+    this._compactMode = !this._introPhase;
+
     // 외부 잠금 (주사위/마블 진행 중 드래그 비활성화)
     this._externalLock = false;
 
@@ -112,46 +115,50 @@ export default class CandyMatch {
       }
     }
 
-    // Place 3x3 special area at bottom center
-    const centerCol = Math.floor(this.cols / 2);
-    const bottomRow = this.rows - 1;
-    this._chests = {};
-    this._chestsOpened = 0;
+    // 컴팩트 모드에서는 특수 영역 없이 순수 캔디 보드
+    if (!this._compactMode) {
+      // Place 3x3 special area at bottom center
+      const centerCol = Math.floor(this.cols / 2);
+      const bottomRow = this.rows - 1;
+      this._chests = {};
+      this._chestsOpened = 0;
 
-    for (let dr = 0; dr < 3; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        const r = bottomRow - dr;
-        const c = centerCol + dc;
-        if (dr === 1 && dc === 0) {
-          this._diceCell = r + ',' + c;
-          this.board[r][c] = -2;
-        } else {
-          this._chests[r + ',' + c] = { opened: false, rarity: null, spirit: null };
-          this.board[r][c] = -1;
+      for (let dr = 0; dr < 3; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const r = bottomRow - dr;
+          const c = centerCol + dc;
+          if (dr === 1 && dc === 0) {
+            this._diceCell = r + ',' + c;
+            this.board[r][c] = -2;
+          } else {
+            this._chests[r + ',' + c] = { opened: false, rarity: null, spirit: null };
+            this.board[r][c] = -1;
+          }
         }
       }
-    }
 
-    // Mark equipment slots (left of treasure): board value -3
-    for (const [r, c] of BOARD_SLOT_LAYOUT.equipmentPositions) {
-      if (r < this.rows && c < this.cols) {
-        this.board[r][c] = BOARD_SLOT_LAYOUT.boardMarkers.equipment;
+      // Mark equipment slots (left of treasure): board value -3
+      for (const [r, c] of BOARD_SLOT_LAYOUT.equipmentPositions) {
+        if (r < this.rows && c < this.cols) {
+          this.board[r][c] = BOARD_SLOT_LAYOUT.boardMarkers.equipment;
+        }
       }
-    }
-    // Mark hero slots: board value -4
-    for (const [r, c] of BOARD_SLOT_LAYOUT.heroSlotPositions) {
-      if (r < this.rows && c < this.cols) {
-        this.board[r][c] = BOARD_SLOT_LAYOUT.boardMarkers.heroSlot;
+      // Mark hero slots: board value -4
+      for (const [r, c] of BOARD_SLOT_LAYOUT.heroSlotPositions) {
+        if (r < this.rows && c < this.cols) {
+          this.board[r][c] = BOARD_SLOT_LAYOUT.boardMarkers.heroSlot;
+        }
       }
-    }
-    // Mark pet slot: board value -5
-    const [petR, petC] = BOARD_SLOT_LAYOUT.petSlotPosition;
-    if (petR < this.rows && petC < this.cols) {
-      this.board[petR][petC] = BOARD_SLOT_LAYOUT.boardMarkers.petSlot;
+      // Mark pet slot: board value -5
+      const [petR, petC] = BOARD_SLOT_LAYOUT.petSlotPosition;
+      if (petR < this.rows && petC < this.cols) {
+        this.board[petR][petC] = BOARD_SLOT_LAYOUT.boardMarkers.petSlot;
+      }
+
+      this._generateMarblePath();
     }
 
     this._removeInitialMatches();
-    this._generateMarblePath();
 
     // skipIntro가 아닌 경우에만 인트로 실행 (보물상자/주사위/영웅이동)
     // skipIntro 시에는 constructor에서 이미 _introPhase = false 설정됨
@@ -776,6 +783,12 @@ export default class CandyMatch {
 
   // --- Helpers ---
 
+  /** 보드 셀(r,c)의 그리드 DOM 인덱스 반환 */
+  _getCellIndex(r, c) {
+    if (this._compactMode) return r * this.cols + c;
+    return (r + 1) * (this.cols + 2) + (c + 1);
+  }
+
   _isSpecial(r, c) {
     return this._isChest(r, c) || this._isDice(r, c) || this._isEquipmentSlot(r, c) || this._isHeroSlot(r, c) || this._isPetSlot(r, c);
   }
@@ -869,9 +882,10 @@ export default class CandyMatch {
     const progress = this._helperActive
       ? Math.min(100, this._tilesDestroyed / this._tileTarget * 100)
       : Math.min(100, this._matchCount / this._matchTarget * 100);
-    const totalCols = this.cols + 2;
-    const totalRows = this.rows + 2;
-    const cellSize = 40;
+    const compact = this._compactMode;
+    const totalCols = compact ? this.cols : this.cols + 2;
+    const totalRows = compact ? this.rows : this.rows + 2;
+    const cellSize = compact ? 52 : 40;
 
     const ragePhase = this._getRagePhase();
     const ragePercent = Math.min(100, GameState.rageGauge);
@@ -890,7 +904,6 @@ export default class CandyMatch {
     const goalText = this._helperActive
       ? `💥 타일 파괴: ${this._tilesDestroyed}/${this._tileTarget}`
       : `🔗 매치: ${this._matchCount}/${this._matchTarget}`;
-    const infoText = `${goalText} | 남은 이동: ${this.moves} | 🔮 조각: ${fragBar} (${this._fragmentProgress}/6) | 세트: ${this._fragmentSets}`;
 
     const helperBarHtml = this._helperActive ? `
         <div class="helper-bar" id="helper-bar">
@@ -899,37 +912,72 @@ export default class CandyMatch {
           <button class="helper-dismiss-btn" id="helper-dismiss">혼자 할래요</button>
         </div>` : '';
 
-    this.container.innerHTML = `
-      <div class="candy-scene">
-        <div class="scene-title" style="color:var(--pink);">🍬 캔디 매치!</div>
-        <div class="scene-subtitle">보석을 드래그하여 이동! (8방향, ${this._dragMaxTime / 1000}초 제한)</div>
-        ${helperBarHtml}
-        <div class="info-bar" id="candy-info">${infoText}</div>
-        <div class="progress-bar" style="margin:0 auto 6px;">
-          <div class="progress-fill" style="width:${progress}%"></div>
-        </div>
-        <div class="rage-gauge-bar">
-          <span class="rage-icon ${ragePercent >= 100 ? 'rage-full-pulse' : ''}">${ragePhase.emoji}</span>
-          <div class="rage-track">
-            <div class="rage-fill" style="width:${ragePercent}%;background:${ragePhase.color};"></div>
+    if (compact) {
+      // ── 컴팩트 모드: 타일 크게, 하단 축소 ──
+      const heroSlots = GameState.heroSlots || [];
+      const heroIcons = heroSlots.filter(Boolean).map(h => h.emoji || '⚔️').join(' ') || '—';
+      const petIcon = GameState.petSlot ? (GameState.petSlot.emoji || '🐾') : '—';
+
+      this.container.innerHTML = `
+        <div class="candy-scene candy-compact">
+          ${helperBarHtml}
+          <div class="candy-compact-info" id="candy-info">
+            <span class="cci-goal">${goalText}</span>
+            <span class="cci-moves">🔄${this.moves}</span>
+            <span class="cci-frag">🔮${this._fragmentProgress}/6</span>
+            <span class="cci-rage ${ragePercent >= 100 ? 'rage-full-pulse' : ''}">${ragePhase.emoji}${Math.floor(ragePercent)}%</span>
           </div>
-          <span class="rage-label">${Math.floor(ragePercent)}%</span>
+          <div class="progress-bar compact-progress" style="margin:0 auto 2px;">
+            <div class="progress-fill" style="width:${progress}%"></div>
+          </div>
+          <div class="pad-drag-timer" id="drag-timer" style="display:none;">
+            <div class="pad-drag-timer-fill" id="drag-timer-fill"></div>
+          </div>
+          <div class="candy-board-wrapper" id="candy-board-wrapper"></div>
+          <div class="candy-mini-bar">
+            <span class="cmb-heroes" title="영웅">${heroIcons}</span>
+            <span class="cmb-pet" title="펫">${petIcon}</span>
+            <span class="cmb-sets" title="세트">📦${this._fragmentSets}</span>
+          </div>
+          ${cleared ? '<button class="btn btn-primary btn-sm" id="candy-clear-btn" style="margin-top:4px;">🎉 클리어!</button>' : ''}
+          ${!cleared && this.moves <= 0 ? '<button class="btn btn-gold btn-sm" id="candy-retry-btn" style="margin-top:4px;">🔄 다시</button>' : ''}
         </div>
-        <div class="pad-drag-timer" id="drag-timer" style="display:none;">
-          <div class="pad-drag-timer-fill" id="drag-timer-fill"></div>
+      `;
+    } else {
+      // ── 기존 모드: 마블 보더 + 장비/영웅 슬롯 ──
+      const infoText = `${goalText} | 남은 이동: ${this.moves} | 🔮 조각: ${fragBar} (${this._fragmentProgress}/6) | 세트: ${this._fragmentSets}`;
+      this.container.innerHTML = `
+        <div class="candy-scene">
+          <div class="scene-title" style="color:var(--pink);">🍬 캔디 매치!</div>
+          <div class="scene-subtitle">보석을 드래그하여 이동! (8방향, ${this._dragMaxTime / 1000}초 제한)</div>
+          ${helperBarHtml}
+          <div class="info-bar" id="candy-info">${infoText}</div>
+          <div class="progress-bar" style="margin:0 auto 6px;">
+            <div class="progress-fill" style="width:${progress}%"></div>
+          </div>
+          <div class="rage-gauge-bar">
+            <span class="rage-icon ${ragePercent >= 100 ? 'rage-full-pulse' : ''}">${ragePhase.emoji}</span>
+            <div class="rage-track">
+              <div class="rage-fill" style="width:${ragePercent}%;background:${ragePhase.color};"></div>
+            </div>
+            <span class="rage-label">${Math.floor(ragePercent)}%</span>
+          </div>
+          <div class="pad-drag-timer" id="drag-timer" style="display:none;">
+            <div class="pad-drag-timer-fill" id="drag-timer-fill"></div>
+          </div>
+          <div class="candy-board-wrapper" id="candy-board-wrapper"></div>
+          ${cleared ? '<button class="btn btn-primary" id="candy-clear-btn" style="margin-top:12px;">🎉 클리어! 다음으로</button>' : ''}
+          ${!cleared && this.moves <= 0 ? '<button class="btn btn-gold" id="candy-retry-btn" style="margin-top:12px;">🔄 다시 하기</button>' : ''}
         </div>
-        <div class="candy-board-wrapper" id="candy-board-wrapper"></div>
-        ${cleared ? '<button class="btn btn-primary" id="candy-clear-btn" style="margin-top:12px;">🎉 클리어! 다음으로</button>' : ''}
-        ${!cleared && this.moves <= 0 ? '<button class="btn btn-gold" id="candy-retry-btn" style="margin-top:12px;">🔄 다시 하기</button>' : ''}
-      </div>
-    `;
+      `;
+    }
 
     const wrapper = this.container.querySelector('#candy-board-wrapper');
     wrapper.style.cssText = `
       display:inline-grid;
       grid-template-columns:repeat(${totalCols}, ${cellSize}px);
       grid-template-rows:repeat(${totalRows}, ${cellSize}px);
-      gap:2px;justify-content:center;margin-bottom:var(--gap-md);
+      gap:2px;justify-content:center;
       position:relative;user-select:none;touch-action:none;
     `;
 
@@ -937,79 +985,105 @@ export default class CandyMatch {
 
     for (let r = 0; r < totalRows; r++) {
       for (let c = 0; c < totalCols; c++) {
-        const isBorder = r === 0 || r === totalRows - 1 || c === 0 || c === totalCols - 1;
         const cell = document.createElement('div');
         cell.style.width = cellSize + 'px';
         cell.style.height = cellSize + 'px';
 
-        if (isBorder) {
-          const tile = this._getPathTileAt(r, c);
-          cell.className = 'marble-path-tile';
-          if (tile) {
-            const isHere = this._marblePath[this._heroPos] === tile;
-            if (tile.collected || tile.drop.type === 'empty') {
-              cell.textContent = '·';
-              cell.style.opacity = tile.collected ? '0.35' : '0.5';
-            } else if (tile.isMimic) {
-              cell.classList.add('mimic-tile');
-              cell.textContent = GOLDEN_MIMIC.emoji;
-            } else if (tile.drop.rare) {
-              cell.classList.add('rare-drop-tile');
-              cell.textContent = tile.drop.emoji;
-            } else {
-              cell.textContent = tile.drop.emoji;
-            }
-            if (isHere) {
-              cell.classList.add('hero-tile');
-              cell.innerHTML = `<span class="hero-fairy">${HERO_EMOJI}</span>`;
-            }
+        if (compact) {
+          // ── 컴팩트: 모든 셀이 캔디 ──
+          if (this._isSpecialTile(r, c)) {
+            const info = this._getSpecialTileInfo(this.board[r][c]);
+            cell.className = 'candy-cell candy-cell-lg special-tile';
+            cell.textContent = info ? info.emoji : '💫';
+          } else {
+            cell.className = 'candy-cell candy-cell-lg';
+            cell.textContent = GEMS[this.board[r][c]];
           }
-        } else {
-          const cr = r - 1;
-          const cc = c - 1;
+          cell.dataset.r = r;
+          cell.dataset.c = c;
+          this._cellElements[r + ',' + c] = cell;
 
-          if (this._isEquipmentSlot(cr, cc)) {
-            this._renderEquipSlotCell(cell, cr, cc);
-          } else if (this._isPetSlot(cr, cc)) {
-            this._renderPetSlotCell(cell);
-          } else if (this._isHeroSlot(cr, cc)) {
-            this._renderHeroSlotCell(cell, cr, cc);
-          } else if (this._isDice(cr, cc)) {
-            cell.className = 'candy-dice-cell';
-            cell.innerHTML = `<span>${this._dice[0]}</span><span>${this._dice[1]}</span>`;
-          } else if (this._isChest(cr, cc)) {
-            const opened = this._isChestOpened(cr, cc);
-            const chest = this._chests[cr + ',' + cc];
-            cell.className = 'candy-chest' + (opened ? ' opened' : '');
-            if (opened && chest.spirit) {
-              cell.textContent = chest.spirit.emoji;
-              cell.style.borderColor = RARITY_COLORS[chest.rarity];
-            } else {
-              cell.textContent = opened ? '✨' : '🎁';
+          cell.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            this._handleMouseDown(r, c, e);
+          });
+          cell.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const t = e.touches[0];
+            this._handleMouseDown(r, c, t);
+          }, { passive: false });
+        } else {
+          // ── 기존: 보더 + 특수셀 ──
+          const isBorder = r === 0 || r === totalRows - 1 || c === 0 || c === totalCols - 1;
+          if (isBorder) {
+            const tile = this._getPathTileAt(r, c);
+            cell.className = 'marble-path-tile';
+            if (tile) {
+              const isHere = this._marblePath[this._heroPos] === tile;
+              if (tile.collected || tile.drop.type === 'empty') {
+                cell.textContent = '·';
+                cell.style.opacity = tile.collected ? '0.35' : '0.5';
+              } else if (tile.isMimic) {
+                cell.classList.add('mimic-tile');
+                cell.textContent = GOLDEN_MIMIC.emoji;
+              } else if (tile.drop.rare) {
+                cell.classList.add('rare-drop-tile');
+                cell.textContent = tile.drop.emoji;
+              } else {
+                cell.textContent = tile.drop.emoji;
+              }
+              if (isHere) {
+                cell.classList.add('hero-tile');
+                cell.innerHTML = `<span class="hero-fairy">${HERO_EMOJI}</span>`;
+              }
             }
           } else {
-            // Special tile (encoded value >= 100) or normal candy
-            if (this._isSpecialTile(cr, cc)) {
-              const info = this._getSpecialTileInfo(this.board[cr][cc]);
-              cell.className = 'candy-cell special-tile';
-              cell.textContent = info ? info.emoji : '💫';
-            } else {
-              cell.className = 'candy-cell';
-              cell.textContent = GEMS[this.board[cr][cc]];
-            }
-            cell.dataset.r = cr;
-            cell.dataset.c = cc;
-            this._cellElements[cr + ',' + cc] = cell;
+            const cr = r - 1;
+            const cc = c - 1;
 
-            cell.addEventListener('mousedown', (e) => {
-              e.preventDefault();
-              this._handleMouseDown(cr, cc, e);
-            });
-            cell.addEventListener('touchstart', (e) => {
-              e.preventDefault();
-              const t = e.touches[0];
-              this._handleMouseDown(cr, cc, t);
-            }, { passive: false });
+            if (this._isEquipmentSlot(cr, cc)) {
+              this._renderEquipSlotCell(cell, cr, cc);
+            } else if (this._isPetSlot(cr, cc)) {
+              this._renderPetSlotCell(cell);
+            } else if (this._isHeroSlot(cr, cc)) {
+              this._renderHeroSlotCell(cell, cr, cc);
+            } else if (this._isDice(cr, cc)) {
+              cell.className = 'candy-dice-cell';
+              cell.innerHTML = `<span>${this._dice[0]}</span><span>${this._dice[1]}</span>`;
+            } else if (this._isChest(cr, cc)) {
+              const opened = this._isChestOpened(cr, cc);
+              const chest = this._chests[cr + ',' + cc];
+              cell.className = 'candy-chest' + (opened ? ' opened' : '');
+              if (opened && chest.spirit) {
+                cell.textContent = chest.spirit.emoji;
+                cell.style.borderColor = RARITY_COLORS[chest.rarity];
+              } else {
+                cell.textContent = opened ? '✨' : '🎁';
+              }
+            } else {
+              // Special tile (encoded value >= 100) or normal candy
+              if (this._isSpecialTile(cr, cc)) {
+                const info = this._getSpecialTileInfo(this.board[cr][cc]);
+                cell.className = 'candy-cell special-tile';
+                cell.textContent = info ? info.emoji : '💫';
+              } else {
+                cell.className = 'candy-cell';
+                cell.textContent = GEMS[this.board[cr][cc]];
+              }
+              cell.dataset.r = cr;
+              cell.dataset.c = cc;
+              this._cellElements[cr + ',' + cc] = cell;
+
+              cell.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                this._handleMouseDown(cr, cc, e);
+              });
+              cell.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const t = e.touches[0];
+                this._handleMouseDown(cr, cc, t);
+              }, { passive: false });
+            }
           }
         }
         wrapper.appendChild(cell);
@@ -2122,8 +2196,7 @@ export default class CandyMatch {
     let cy = wrapperRect.top + wrapperRect.height / 2;
     if (group && group.cells.length > 0) {
       const midCell = group.cells[Math.floor(group.cells.length / 2)];
-      const totalCols = this.cols + 2;
-      const gridIdx = (midCell[0] + 1) * totalCols + (midCell[1] + 1);
+      const gridIdx = this._getCellIndex(midCell[0], midCell[1]);
       const cellEl = wrapper.children[gridIdx];
       if (cellEl) {
         const cellRect = cellEl.getBoundingClientRect();
@@ -2204,8 +2277,7 @@ export default class CandyMatch {
     let startY = window.innerHeight / 2;
     if (wrapper && group && group.cells.length > 0) {
       const midCell = group.cells[Math.floor(group.cells.length / 2)];
-      const totalCols = this.cols + 2;
-      const gridIdx = (midCell[0] + 1) * totalCols + (midCell[1] + 1);
+      const gridIdx = this._getCellIndex(midCell[0], midCell[1]);
       const cellEl = wrapper.children[gridIdx];
       if (cellEl) {
         const rect = cellEl.getBoundingClientRect();
@@ -2304,22 +2376,25 @@ export default class CandyMatch {
     const wrapper = this.container.querySelector('#candy-board-wrapper');
     if (!wrapper) { this.isProcessing = false; GameState.resetRage(); return; }
 
-    // ── 1. 주사위 셀 위치 찾기 (주인공 출발점) ──
-    const [diceR, diceC] = this._diceCell.split(',').map(Number);
-    const totalCols = this.cols + 2;
-    const diceGridIdx = (diceR + 1) * totalCols + (diceC + 1); // +1 for border
-    const diceEl = wrapper.children[diceGridIdx];
+    // ── 1. 주인공 출발점 (컴팩트: 보드 중앙, 기존: 주사위 셀) ──
     const wrapperRect = wrapper.getBoundingClientRect();
     const centerX = wrapperRect.left + wrapperRect.width / 2;
     const centerY = wrapperRect.top + wrapperRect.height / 2;
+    let startRect = { left: centerX - 20, top: centerY - 20, width: 40, height: 40 };
+
+    if (!this._compactMode && this._diceCell) {
+      const [diceR, diceC] = this._diceCell.split(',').map(Number);
+      const diceGridIdx = this._getCellIndex(diceR, diceC);
+      const diceEl = wrapper.children[diceGridIdx];
+      if (diceEl) startRect = diceEl.getBoundingClientRect();
+    }
 
     // ── 2. 주인공 플라이 엘리먼트 생성 ──
     const heroFly = document.createElement('div');
     heroFly.className = 'rage-fly-hero';
     heroFly.innerHTML = `<span class="hero-fairy">${HERO_EMOJI}</span>`;
-    const diceRect = diceEl ? diceEl.getBoundingClientRect() : { left: centerX - 20, top: centerY - 20, width: 40, height: 40 };
-    heroFly.style.left = (diceRect.left + diceRect.width / 2) + 'px';
-    heroFly.style.top = (diceRect.top + diceRect.height / 2) + 'px';
+    heroFly.style.left = (startRect.left + startRect.width / 2) + 'px';
+    heroFly.style.top = (startRect.top + startRect.height / 2) + 'px';
     document.body.appendChild(heroFly);
 
     showComboText('💢 정화의 빛!');
@@ -2333,25 +2408,27 @@ export default class CandyMatch {
 
     // ── 4. 슬롯 영웅들 수집 + 자리 위치 계산 ──
     const slotHeroFlies = [];
-    GameState.heroSlots.forEach((hero, idx) => {
-      if (!hero) return;
-      const pos = BOARD_SLOT_LAYOUT.heroSlotPositions[idx];
-      if (!pos) return;
-      const gridIdx = (pos[0] + 1) * totalCols + (pos[1] + 1);
-      const slotEl = wrapper.children[gridIdx];
-      if (!slotEl) return;
+    if (!this._compactMode) {
+      GameState.heroSlots.forEach((hero, idx) => {
+        if (!hero) return;
+        const pos = BOARD_SLOT_LAYOUT.heroSlotPositions[idx];
+        if (!pos) return;
+        const gridIdx = this._getCellIndex(pos[0], pos[1]);
+        const slotEl = wrapper.children[gridIdx];
+        if (!slotEl) return;
 
-      const slotRect = slotEl.getBoundingClientRect();
-      const fly = document.createElement('div');
-      fly.className = 'rage-fly-slot-hero';
-      fly.innerHTML = `<span style="font-size:20px;">${hero.emoji}</span>`;
-      fly.style.left = (slotRect.left + slotRect.width / 2) + 'px';
-      fly.style.top = (slotRect.top + slotRect.height / 2) + 'px';
-      fly.dataset.originX = slotRect.left + slotRect.width / 2;
-      fly.dataset.originY = slotRect.top + slotRect.height / 2;
-      document.body.appendChild(fly);
-      slotHeroFlies.push(fly);
-    });
+        const slotRect = slotEl.getBoundingClientRect();
+        const fly = document.createElement('div');
+        fly.className = 'rage-fly-slot-hero';
+        fly.innerHTML = `<span style="font-size:20px;">${hero.emoji}</span>`;
+        fly.style.left = (slotRect.left + slotRect.width / 2) + 'px';
+        fly.style.top = (slotRect.top + slotRect.height / 2) + 'px';
+        fly.dataset.originX = slotRect.left + slotRect.width / 2;
+        fly.dataset.originY = slotRect.top + slotRect.height / 2;
+        document.body.appendChild(fly);
+        slotHeroFlies.push(fly);
+      });
+    }
 
     // ── 5. 타이밍 체인 ──
     const FLY_DUR = 400;
@@ -2476,8 +2553,7 @@ export default class CandyMatch {
     toClear.forEach(({ r, c, dist }, idx) => {
       const delay = dist * 50 + idx * 15;
       setTimeout(() => {
-        const totalCols = this.cols + 2;
-        const gridIdx = (r + 1) * totalCols + (c + 1);
+        const gridIdx = this._getCellIndex(r, c);
         const cellEl = wrapper.children[gridIdx];
         if (cellEl) {
           cellEl.classList.add('rage-tile-explode');

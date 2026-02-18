@@ -1822,3 +1822,83 @@
 .shop-item-btn:disabled {
   cursor: default;
 }
+
+/* ====================================================
+   컴팩트 모드 (통합 스테이지1: 큰 타일, 하단 축소)
+   ==================================================== */
+
+.candy-compact {
+  padding: 0 2px;
+}
+
+/* 큰 캔디 셀 (52px) */
+.candy-cell-lg {
+  font-size: 26px;
+  border-radius: 8px;
+}
+
+.candy-cell-lg.special-tile {
+  font-size: 24px;
+}
+
+/* 컴팩트 info 바 (1줄) */
+.candy-compact-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--text-secondary, #aab);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.cci-goal {
+  font-weight: 700;
+  color: var(--text-primary, #eee);
+}
+
+.cci-moves {
+  color: var(--gold, #fbbf24);
+  font-weight: 600;
+}
+
+.cci-frag {
+  color: #a29bfe;
+}
+
+.cci-rage {
+  font-weight: 600;
+}
+
+/* 컴팩트 프로그레스 바 */
+.compact-progress {
+  height: 4px !important;
+  max-width: 90%;
+  border-radius: 2px;
+}
+
+/* 하단 미니바 (영웅/펫/세트 아이콘) */
+.candy-mini-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 2px 8px;
+  font-size: 13px;
+  color: var(--text-secondary, #aab);
+}
+
+.cmb-heroes {
+  letter-spacing: 2px;
+}
+
+.cmb-pet {
+  opacity: 0.8;
+}
+
+.cmb-sets {
+  color: var(--gold, #fbbf24);
+  font-weight: 600;
+}
