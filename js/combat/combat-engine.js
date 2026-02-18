@@ -1060,30 +1060,34 @@ export default class CombatEngine {
       ctx.shadowBlur = 0;
     });
 
-    // Spirits (정령들 — 각자 미사일 발사!)
+    // Spirits (정령들 — 아주 작은 크기)
     this.spirits.forEach(s => {
       const sx = s.x - cx;
       const sy = s.y - cy;
-      ctx.font = '16px serif';
+      ctx.font = '10px serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       // Glow ring
       ctx.strokeStyle = (ATTR_GLOW[s.attribute] || 'rgba(255,255,255,0.3)');
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(sx, sy, 12, 0, Math.PI * 2);
+      ctx.arc(sx, sy, 7, 0, Math.PI * 2);
       ctx.stroke();
       ctx.fillText(s.emoji, sx, sy);
     });
 
-    // Slot heroes
+    // Slot heroes (장착 영웅)
     this.slotHeroes.forEach(h => {
       const sx = h.x - cx;
       const sy = h.y - cy;
-      ctx.font = '18px serif';
+      ctx.font = '14px serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      // 약한 글로우
+      ctx.shadowColor = 'rgba(255,200,100,0.4)';
+      ctx.shadowBlur = 6;
       ctx.fillText(h.emoji, sx, sy);
+      ctx.shadowBlur = 0;
     });
 
     // Pet

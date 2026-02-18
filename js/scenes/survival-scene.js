@@ -18,6 +18,7 @@ import BossApproachSystem from '../systems/boss-approach.js';
 import AutoWalk from '../systems/auto-walk.js';
 import RageSystem from '../systems/rage-system.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
+import UnitFactory from '../data/unit-factory.js';
 
 // ── 서바이벌 맵 10종 ──
 const SURVIVAL_BIOMES = [
@@ -89,6 +90,14 @@ class SurvivalEngine {
       emoji: GameState.heroAppearance?.emoji || '🧚',
       bobPhase: 0,
     };
+
+    // 슬롯 영웅 (최대 2, UnitFactory 경유)
+    this.slotHeroes = GameState.heroSlots.filter(h => h != null).slice(0, 2)
+      .map((h, i) => UnitFactory.createAlly(h, { combatRole: 'slotHero', index: i, playerPos: this.player }));
+
+    // 정령 (GameState에서 소환된 정령들)
+    this.spirits = GameState.spirits.map((s, i) =>
+      UnitFactory.createSpirit({ ...s, combatMode: true, orbitIndex: i }));
 
     // Entities
     this.enemies = [];
@@ -247,6 +256,8 @@ class SurvivalEngine {
 
     this._updateWaveTimer(dt);
     this._updatePlayer(dt);
+    this._updateSlotHeroes(dt);
+    this._updateSpirits(dt);
     this._updateAutoAttack(dt);
     this._updateEnemies(dt);
     this._updateProjectiles(dt);
@@ -390,6 +401,67 @@ class SurvivalEngine {
         homing: this.player.homing, target: nearest,
       });
     }
+  }
+
+  // ── Slot Heroes ──
+  _updateSlotHeroes(dt) {
+    this.slotHeroes.forEach((h, i) => {
+      const targetX = this.player.x - 30;
+      const targetY = this.player.y + (i === 0 ? -35 : 35);
+      h.x += (targetX - h.x) * 0.08;
+      h.y += (targetY - h.y) * 0.08;
+      h.atkTimer -= dt;
+      if (h.atkTimer <= 0 && this.enemies.length > 0) {
+        let nearest = null, nd = Infinity;
+        for (const e of this.enemies) {
+          if (e.purifyState !== undefined && e.purifyState !== 0) continue;
+          const d = Math.sqrt((h.x - e.x) ** 2 + (h.y - e.y) ** 2);
+          if (d < nd) { nd = d; nearest = e; }
+        }
+        if (nearest && nd < 500) {
+          const angle = Math.atan2(nearest.y - h.y, nearest.x - h.x);
+          this.projectiles.push({
+            x: h.x, y: h.y,
+            vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
+            damage: h.attack, source: 'ally', radius: 4,
+            emoji: '⚡', pierce: 0, homing: false, target: null,
+          });
+          h.atkTimer = h.atkSpeed;
+        }
+      }
+    });
+  }
+
+  // ── Spirits ──
+  _updateSpirits(dt) {
+    const SPIRIT_PROJ = { fire:'🔥', water:'💧', lightning:'⚡', dark:'🌑', light:'✨', nature:'🌿', ice:'❄️', wind:'💨' };
+    this.spirits.forEach(s => {
+      s.orbitAngle += dt * 0.0015;
+      const orbitR = 40 + (this.spirits.length > 6 ? 15 : 0);
+      s.x = this.player.x + Math.cos(s.orbitAngle) * orbitR;
+      s.y = this.player.y + Math.sin(s.orbitAngle) * orbitR;
+      s.atkTimer -= dt;
+      if (s.atkTimer <= 0 && this.enemies.length > 0) {
+        let nearest = null, nd = Infinity;
+        for (const e of this.enemies) {
+          if (e.purifyState !== undefined && e.purifyState !== 0) continue;
+          const d = Math.sqrt((s.x - e.x) ** 2 + (s.y - e.y) ** 2);
+          if (d < nd) { nd = d; nearest = e; }
+        }
+        if (nearest && nd < 600) {
+          const dmg = 5 + (s.rarity || 1) * 3 + (s.level || 1);
+          const angle = Math.atan2(nearest.y - s.y, nearest.x - s.x);
+          this.projectiles.push({
+            x: s.x, y: s.y,
+            vx: Math.cos(angle) * 5, vy: Math.sin(angle) * 5,
+            damage: dmg, source: 'ally', radius: 3,
+            emoji: SPIRIT_PROJ[s.attribute] || '✨',
+            pierce: 0, homing: false, target: null,
+          });
+          s.atkTimer = s.atkSpeed || 800;
+        }
+      }
+    });
   }
 
   // ── Enemies ──
@@ -841,6 +913,28 @@ class SurvivalEngine {
       ctx.font = `${Math.round(p.radius * 3)}px serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(p.emoji, sx, sy);
+    });
+
+    // Spirits (아주 작게)
+    const ATTR_GLOW = { fire:'rgba(255,100,50,0.5)', water:'rgba(100,150,255,0.5)', lightning:'rgba(255,255,100,0.5)', dark:'rgba(100,50,150,0.5)', light:'rgba(255,255,200,0.5)', nature:'rgba(100,200,100,0.5)', ice:'rgba(150,220,255,0.5)', wind:'rgba(200,255,200,0.5)' };
+    this.spirits.forEach(s => {
+      const sx = s.x - cx, sy = s.y - cy;
+      ctx.font = '10px serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.strokeStyle = ATTR_GLOW[s.attribute] || 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillText(s.emoji, sx, sy);
+    });
+
+    // Slot heroes (장착 영웅)
+    this.slotHeroes.forEach(h => {
+      const sx = h.x - cx, sy = h.y - cy;
+      ctx.font = '14px serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(255,200,100,0.4)'; ctx.shadowBlur = 6;
+      ctx.fillText(h.emoji, sx, sy);
+      ctx.shadowBlur = 0;
     });
 
     // Player
