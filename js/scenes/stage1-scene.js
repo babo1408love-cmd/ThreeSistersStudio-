@@ -180,6 +180,7 @@ export default class Stage1Scene {
   // ── 스테이지 클리어 ──
 
   _onStageClear(result) {
+    if (this._phase === 'clear') return; // 중복 호출 방지
     this._phase = 'clear';
     this._updatePhaseLabel();
     if (this._candyMatch) this._candyMatch.setLocked(true);
