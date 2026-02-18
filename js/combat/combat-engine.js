@@ -66,8 +66,8 @@ export default class CombatEngine {
     slots.forEach((h, i) => {
       this.slotHeroes.push({
         x: this.player.x - 30, y: this.player.y + (i === 0 ? -35 : 35),
-        hp: 80, maxHp: 80, attack: h.attack || 8, defense: 3,
-        radius: 12, atkTimer: 0, atkSpeed: 700,
+        hp: 100, maxHp: 100, attack: h.attack || 10, defense: 4,
+        radius: 12, atkTimer: 0, atkSpeed: 500, // 더 빠른 공격
         emoji: h.emoji || '🧚', name: h.name || '동료',
         attribute: h.attribute || 'light',
       });
@@ -85,8 +85,8 @@ export default class CombatEngine {
         level: s.level || 1,
         emoji: s.emoji || '✨',
         name: s.name || '정령',
-        atkTimer: 0,
-        atkCooldown: Math.max(800, 2000 - (s.rarity || 1) * 200),
+        atkTimer: Math.random() * 300, // 시작 시 약간의 랜덤 딜레이 (동시 발사 방지)
+        atkCooldown: Math.max(400, 1200 - (s.rarity || 1) * 150), // 빠른 쿨다운!
         currentSkillFx: null,
       });
     });
@@ -355,34 +355,53 @@ export default class CombatEngine {
   }
 
   _updateSpirits(dt) {
+    // 속성별 미사일 이모지
+    const SPIRIT_PROJ_EMOJI = {
+      fire:'🔥', water:'💧', lightning:'⚡', dark:'🌑',
+      light:'✨', nature:'🌿', ice:'❄️', wind:'💨',
+    };
+
     this.spirits.forEach(s => {
       // Orbit around player
       s.orbitAngle += dt * 0.0015;
-      const orbitR = 50;
+      const orbitR = 40 + (this.spirits.length > 6 ? 15 : 0);
       s.x = this.player.x + Math.cos(s.orbitAngle) * orbitR;
       s.y = this.player.y + Math.sin(s.orbitAngle) * orbitR;
 
-      // Spirit auto-attack (속성별 이펙트)
+      // 정령 미사일 발사 — 정령 수만큼 미사일이 날아감!
       s.atkTimer -= dt;
       if (s.atkTimer <= 0 && this.enemies.length > 0) {
         const nearest = this._findNearest(s, this.enemies);
-        if (nearest && this._dist(s, nearest) < 300) {
-          const skill = getSkillByTier(s.attribute, Math.min(3, Math.ceil(s.level / 4)));
-          if (skill) {
-            const dmg = Math.round(skill.dmg * (1 + s.rarity * 0.3));
-            // Create attack effect
-            this.activeAttackFx.push({
-              skill,
-              origin: { x: s.x, y: s.y },
-              target: { x: nearest.x, y: nearest.y },
-              progress: 0,
-              duration: 500,
-              damage: dmg,
-              targetEnemy: nearest,
-              hit: false,
-            });
-            s.atkTimer = s.atkCooldown;
-          }
+        if (nearest && this._dist(s, nearest) < 350) {
+          const baseDmg = 5 + s.rarity * 3 + s.level;
+          const dmg = this.rageActive ? baseDmg * 2 : baseDmg;
+          const angle = Math.atan2(nearest.y - s.y, nearest.x - s.x);
+          const projEmoji = SPIRIT_PROJ_EMOJI[s.attribute] || '✨';
+          const projSpeed = 5 + s.rarity * 0.5;
+
+          // 미사일 발사! (실제 투사체 생성)
+          this.projectiles.push({
+            x: s.x, y: s.y,
+            vx: Math.cos(angle) * projSpeed,
+            vy: Math.sin(angle) * projSpeed,
+            damage: dmg,
+            source: 'ally',
+            radius: 4 + s.rarity,
+            emoji: projEmoji,
+            pierce: 0,
+            homing: s.rarity >= 3, // 매직 이상은 호밍
+            target: s.rarity >= 3 ? nearest : null,
+            spiritName: s.name,
+          });
+
+          // 발사 이펙트 (작은 반짝임)
+          this.particles.push({
+            x: s.x, y: s.y,
+            vx: Math.cos(angle) * 0.5, vy: Math.sin(angle) * 0.5,
+            life: 200, color: '#fbbf24', size: 3, type: 'circle',
+          });
+
+          s.atkTimer = s.atkCooldown;
         }
       }
     });
@@ -869,17 +888,23 @@ export default class CombatEngine {
       renderAttack(ctx, fx.skill, origin, target, fx.progress);
     });
 
-    // Projectiles
+    // Projectiles (정령 미사일 포함 — 정령 수만큼 미사일이 날아감!)
     this.projectiles.forEach(p => {
       const sx = p.x - cx;
       const sy = p.y - cy;
+      // 아군 미사일은 빛나는 이펙트
+      if (p.source === 'ally') {
+        ctx.shadowColor = '#fbbf24';
+        ctx.shadowBlur = 6;
+      }
       ctx.font = `${Math.round(p.radius * 3)}px serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(p.emoji, sx, sy);
+      ctx.shadowBlur = 0;
     });
 
-    // Spirits
+    // Spirits (정령들 — 각자 미사일 발사!)
     this.spirits.forEach(s => {
       const sx = s.x - cx;
       const sy = s.y - cy;
@@ -957,14 +982,16 @@ export default class CombatEngine {
 
   // ── 보스방 내 엔티티 렌더링 ──
   _drawBossRoomEntities(ctx, cx, cy) {
-    // Projectiles
+    // Projectiles (보스방에서도 정령 미사일 빛남)
     this.projectiles.forEach(p => {
       const sx = p.x - cx;
       const sy = p.y - cy;
+      if (p.source === 'ally') { ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 6; }
       ctx.font = `${Math.round(p.radius * 3)}px serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(p.emoji, sx, sy);
+      ctx.shadowBlur = 0;
     });
 
     // Spirits
@@ -1179,11 +1206,18 @@ export default class CombatEngine {
     ctx.font = 'bold 12px sans-serif';
     ctx.fillText(`💀 ${this.totalKills}  💰 ${this.totalGold}G`, this.W - pad, pad + 12);
 
+    // Spirit count (정령 미사일 표시)
+    if (this.spirits.length > 0) {
+      ctx.fillStyle = '#c084fc';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(`✨ 정령 ${this.spirits.length}체 전투 중`, this.W - pad, pad + 26);
+    }
+
     // Upgrade item count
     if (this.droppedItems.length > 0) {
       ctx.fillStyle = '#fbbf24';
       ctx.font = '10px sans-serif';
-      ctx.fillText(`🎁 ${this.droppedItems.length}개 아이템!`, this.W - pad, pad + 26);
+      ctx.fillText(`🎁 ${this.droppedItems.length}개 아이템!`, this.W - pad, pad + 40);
     }
   }
 

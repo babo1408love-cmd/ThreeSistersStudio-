@@ -104,7 +104,7 @@ export function generateDrop(enemyDef, waveNum = 1) {
 
 // ── 웨이브 생성 ──
 export function generateWave(waveNum, stageLevel = 1) {
-  const scaling = 1 + (stageLevel - 1) * 0.1 + (waveNum - 1) * 0.1;
+  const scaling = 1 + (stageLevel - 1) * 0.05 + (waveNum - 1) * 0.06;
   const enemyKeys = Object.keys(ENEMIES);
 
   // Slime types by wave
