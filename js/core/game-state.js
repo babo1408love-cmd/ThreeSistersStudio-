@@ -8,12 +8,12 @@ const GameState = {
   currentStage: 1,
   currentPhase: 'menu', // menu, candy, marble, treasure, summoning, combat
 
-  // Player combat stats
+  // Player combat stats (밸런스: HP 200~300, ATK 10~15, DEF 5~10)
   player: {
-    maxHp: 100,
-    hp: 100,
-    attack: 10,
-    defense: 5,
+    maxHp: 250,
+    hp: 250,
+    attack: 12,
+    defense: 7,
     speed: 3
   },
 
@@ -70,6 +70,12 @@ const GameState = {
     marbleCleared: false,
     treasureCleared: false
   },
+
+  // Summon tree data
+  summonTree: null,
+
+  // Hero upgrade data
+  heroUpgrade: null,
 
   // Checkpoint data (saved at summoning room)
   checkpoint: null,
@@ -129,13 +135,13 @@ const GameState = {
 
   // Recalculate player stats from base + equipment + hero level
   recalcStats() {
-    // Base stats + level growth
+    // Base stats + level growth (밸런스: HP 200~300, ATK 10~15)
     const lvl = this.heroLevel - 1;
     const base = {
-      maxHp: 100 + Math.floor(lvl * 8),
+      maxHp: 250 + Math.floor(lvl * 10),
       hp: this.player.hp,
-      attack: 10 + Math.floor(lvl * 2),
-      defense: 5 + Math.floor(lvl * 1.5),
+      attack: 12 + Math.floor(lvl * 2),
+      defense: 7 + Math.floor(lvl * 1.5),
       speed: 3 + Math.round(lvl * 0.3 * 10) / 10,
       critRate: 5 + Math.round(lvl * 0.1 * 10) / 10,
       critDamage: 150 + lvl,
@@ -296,7 +302,9 @@ const GameState = {
       spiritItems: [...this.spiritItems],
       spirits: [...this.spirits],
       stageProgress: { ...this.stageProgress },
-      stats: { ...this.stats }
+      stats: { ...this.stats },
+      summonTree: this.summonTree,
+      heroUpgrade: this.heroUpgrade,
     };
   },
 
@@ -341,7 +349,9 @@ const GameState = {
       spiritItems: data.spiritItems ?? [],
       spirits: data.spirits ?? [],
       stageProgress: data.stageProgress ?? { candyCleared: false, marbleCleared: false, treasureCleared: false },
-      stats: data.stats ?? this.stats
+      stats: data.stats ?? this.stats,
+      summonTree: data.summonTree ?? null,
+      heroUpgrade: data.heroUpgrade ?? null,
     });
     EventBus.emit('state:loaded');
   },
@@ -352,7 +362,7 @@ const GameState = {
     this.gold = 0;
     this.currentStage = 1;
     this.currentPhase = 'menu';
-    this.player = { maxHp: 100, hp: 100, attack: 10, defense: 5, speed: 3, critRate: 5, critDamage: 150, rageGainRate: 100 };
+    this.player = { maxHp: 250, hp: 250, attack: 12, defense: 7, speed: 3, critRate: 5, critDamage: 150, rageGainRate: 100 };
     this.inventory = [];
     this.equipped = { head: null, body: null, arms: null, wings: null, legs: null, shoes: null };
     this.heroSlots = [null, null, null, null, null];
@@ -367,6 +377,8 @@ const GameState = {
     this.spiritItems = [];
     this.spirits = [];
     this.stageProgress = { candyCleared: false, marbleCleared: false, treasureCleared: false };
+    this.summonTree = null;
+    this.heroUpgrade = null;
     this.checkpoint = null;
     this.stats = { totalGold: 0, stagesCleared: 0, spiritsSummoned: 0, enemiesDefeated: 0 };
     EventBus.emit('state:reset');
