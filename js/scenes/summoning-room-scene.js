@@ -9,6 +9,7 @@ import { createHudBar, updateHud } from '../ui/hud.js';
 import { showConfetti, showToast } from '../ui/toast.js';
 import { getRarityInfo } from '../systems/rarity-manager.js';
 import { PET_EVOLUTION, PET_EVOLUTION_POOL } from '../systems/pet-evolution-system.js';
+import { hasSummonTutorialSeen, showSummonTutorial } from '../ui/summon-tutorial.js';
 
 export default class SummoningRoomScene {
   onCreate() {
@@ -342,5 +343,10 @@ export default class SummoningRoomScene {
   onEnter() {
     GameState.currentPhase = 'summoning';
     updateHud();
+
+    // 첫 방문 시 소환/펫 진화 튜토리얼
+    if (!hasSummonTutorialSeen()) {
+      showSummonTutorial();
+    }
   }
 }
