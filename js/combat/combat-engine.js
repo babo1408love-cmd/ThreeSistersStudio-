@@ -7,6 +7,8 @@ import EventBus from '../core/event-bus.js';
 import { ENEMIES, BOSSES, generateWave, generateDrop } from '../generators/enemy-drop-generator.js';
 import { generateMap, renderMap } from '../generators/map-generator.js';
 import { renderAttack, getSkillByTier } from '../generators/spirit-attack-generator.js';
+import BossRoomSystem, { BOSS_ROOM_PHASE } from './boss-room-system.js';
+import AerialCombatSystem from './aerial-combat-system.js';
 
 // ── 업그레이드 아이템 정의 ──
 const UPGRADE_ITEMS = [
@@ -46,10 +48,10 @@ export default class CombatEngine {
       speed: 2.5,
       radius: 16,
       // Combat upgrades
-      atkSpeed: 500, // ms between shots
+      atkSpeed: 300, // ms between shots (faster)
       atkTimer: 0,
-      projSize: 5,
-      projSpeed: 5,
+      projSize: 6,
+      projSpeed: 8,
       shotCount: 1,
       pierce: 0,
       homing: false,
@@ -132,12 +134,23 @@ export default class CombatEngine {
     // Pet heal gauge
     this.petHealGauge = GameState.petHealGauge || 0;
 
+    // 보스방 시스템
+    this.bossRoomSystem = new BossRoomSystem(this, this.stageLevel);
+    this.bossRoomSystem.setGatePosition(this.map.mapW, this.map.mapH);
+
+    // 공중전 시스템
+    this.aerialSystem = new AerialCombatSystem(this);
+
+    // 화면 흔들림 상태
+    this._screenShake = null;
+
     this._bindInput();
   }
 
   start() {
     this.running = true;
     this._lastTime = performance.now();
+    this.currentWave = 1;
     this._spawnWave();
     this._loop();
   }
@@ -163,6 +176,40 @@ export default class CombatEngine {
   //  UPDATE
   // ══════════════════════════════════════
   _update(dt) {
+    // Screen shake update
+    if (this._screenShake) {
+      this._screenShake.timer += dt;
+      if (this._screenShake.timer >= this._screenShake.duration) {
+        this._screenShake = null;
+      }
+    }
+
+    // 보스방 시스템 업데이트
+    if (this.bossRoomSystem.enabled) {
+      this.bossRoomSystem.update(dt);
+    }
+
+    // 공중전 시스템 업데이트
+    this.aerialSystem.update(dt);
+
+    // 보스방 내부에서는 일반 웨이브/적 업데이트 스킵
+    if (this.bossRoomSystem.isInBossRoom()) {
+      // Player movement (보스방에서도 이동 가능)
+      this._updatePlayer(dt);
+      this._updateSlotHeroes(dt);
+      this._updateSpirits(dt);
+      this._updatePet(dt);
+      this._updateAutoAttack(dt);
+      this._updateProjectiles(dt);
+      this._updateAttackFx(dt);
+      this._updateDroppedItems();
+      this._updateParticles(dt);
+      this._updateRage(dt);
+      this._updateCamera();
+      this._checkVictory();
+      return;
+    }
+
     // Wave management
     this._updateWaves(dt);
     // Player movement
@@ -195,6 +242,12 @@ export default class CombatEngine {
 
   _updateWaves(dt) {
     if (this.enemies.length === 0 && this.waveSpawned) {
+      // 마지막 웨이브 클리어 → 보스방 게이트 활성화
+      if (this.currentWave >= this.maxWaves && this.bossRoomSystem.enabled) {
+        this.bossRoomSystem.activateGate();
+        return; // 더 이상 웨이브 스폰 안 함
+      }
+
       this.waveTimer += dt;
       if (this.waveTimer >= this.waveDelay) {
         this.currentWave++;
@@ -210,13 +263,14 @@ export default class CombatEngine {
     this.waveTimer = 0;
     const wave = generateWave(this.currentWave, this.stageLevel);
 
-    // Spawn enemies around screen edges relative to camera
+    // Spawn enemies around screen edges (close enough for projectiles to reach)
     wave.enemies.forEach((eDef, i) => {
       const side = Math.floor(Math.random() * 3); // top/right/bottom
       let sx, sy;
-      if (side === 0) { sx = this.camera.x + this.W + 40 + i * 30; sy = this.camera.y + Math.random() * this.H; }
-      else if (side === 1) { sx = this.camera.x + this.W * 0.5 + Math.random() * this.W * 0.5; sy = this.camera.y - 40; }
-      else { sx = this.camera.x + this.W * 0.5 + Math.random() * this.W * 0.5; sy = this.camera.y + this.H + 40; }
+      const offset = 30 + (i % 3) * 20; // 30~70px outside screen edge
+      if (side === 0) { sx = this.camera.x + this.W + offset; sy = this.camera.y + Math.random() * this.H; }
+      else if (side === 1) { sx = this.camera.x + Math.random() * this.W; sy = this.camera.y - offset; }
+      else { sx = this.camera.x + Math.random() * this.W; sy = this.camera.y + this.H + offset; }
 
       this.enemies.push(this._createEnemy(eDef, sx, sy));
     });
@@ -268,6 +322,11 @@ export default class CombatEngine {
 
     // Bob animation
     this.player.bobPhase += dt * 0.004;
+
+    // 보스방 게이트 진입 체크
+    if (this.bossRoomSystem.checkGateEntry(this.player.x, this.player.y)) {
+      this.bossRoomSystem.enterBossRoom();
+    }
   }
 
   _updateSlotHeroes(dt) {
@@ -437,6 +496,25 @@ export default class CombatEngine {
 
       // Hit enemies
       if (p.source === 'player' || p.source === 'ally') {
+        // 보스방 보스에게 투사체 히트
+        if (this.bossRoomSystem.isInBossRoom() && this.bossRoomSystem.boss) {
+          const boss = this.bossRoomSystem.boss;
+          const bossRadius = (boss.size || 3) * 14;
+          const dx = p.x - boss.x;
+          const dy = p.y - boss.y;
+          const rr = (p.radius || 5) + bossRadius;
+          if (dx * dx + dy * dy < rr * rr && boss.alive) {
+            const dmg = this.bossRoomSystem.damageBoss(p.damage);
+            this._spawnHitParticles(boss.x, boss.y, '#ff6b6b');
+            this.particles.push({
+              x: boss.x, y: boss.y - bossRadius - 5,
+              text: `-${Math.round(dmg)}`, color: '#fbbf24', type: 'text',
+              life: 800, vy: -1, vx: (Math.random() - 0.5) * 0.5,
+            });
+            if (p.pierce > 0) { p.pierce--; } else { return false; }
+          }
+        }
+
         for (let i = this.enemies.length - 1; i >= 0; i--) {
           const e = this.enemies[i];
           if (this._circleHit(p, e)) {
@@ -465,9 +543,9 @@ export default class CombatEngine {
           return false;
         }
       }
-      // Out of map
-      return p.x > this.camera.x - 50 && p.x < this.camera.x + this.W + 50 &&
-             p.y > this.camera.y - 50 && p.y < this.camera.y + this.H + 50;
+      // Out of map (generous range so projectiles reach spawned enemies)
+      return p.x > this.camera.x - 200 && p.x < this.camera.x + this.W + 200 &&
+             p.y > this.camera.y - 200 && p.y < this.camera.y + this.H + 200;
     });
   }
 
@@ -557,6 +635,23 @@ export default class CombatEngine {
   }
 
   _checkVictory() {
+    // 보스방 시스템이 활성이면 보스방 완료로 승리 판정
+    if (this.bossRoomSystem.enabled) {
+      if (this.bossRoomSystem.phase === BOSS_ROOM_PHASE.COMPLETE) {
+        this.running = false;
+        GameState.player.hp = this.player.hp;
+        this.onVictory({
+          enemiesKilled: this.totalKills,
+          goldEarned: this.totalGold,
+          hpRemaining: this.player.hp,
+          wavesCleared: this.currentWave,
+          bossDefeated: true,
+        });
+      }
+      return;
+    }
+
+    // 보스방 없는 스테이지: 기존 웨이브 클리어로 승리
     if (this.currentWave >= this.maxWaves && this.enemies.length === 0 && this.waveSpawned) {
       this.running = false;
       GameState.player.hp = this.player.hp;
@@ -650,6 +745,19 @@ export default class CombatEngine {
   }
 
   _triggerRage() {
+    // 공중전 모드에서는 부스터 발동
+    if (this.aerialSystem.isActive()) {
+      this.rageGauge = 0;
+      GameState.rageGauge = 0;
+      this.aerialSystem.triggerBooster();
+      this.particles.push({
+        x: this.player.x, y: this.player.y - 40,
+        text: '🚀 부스터 질주!', color: '#87ceeb', type: 'text',
+        life: 2000, vy: -0.5, vx: 0,
+      });
+      return;
+    }
+
     this.rageActive = true;
     this.rageGauge = 0;
     this.rageTimer = 5000; // 5초간 2배 공격력
@@ -709,8 +817,29 @@ export default class CombatEngine {
   // ══════════════════════════════════════
   _draw() {
     const ctx = this.ctx;
-    const cx = this.camera.x;
-    const cy = this.camera.y;
+
+    // 화면 흔들림 오프셋 적용
+    let shakeX = 0, shakeY = 0;
+    if (this._screenShake) {
+      const t = this._screenShake.timer / this._screenShake.duration;
+      const fade = 1 - t;
+      const intensity = this._screenShake.intensity * fade;
+      shakeX = (Math.random() - 0.5) * intensity * 2;
+      shakeY = (Math.random() - 0.5) * intensity * 2;
+    }
+
+    const cx = this.camera.x + shakeX;
+    const cy = this.camera.y + shakeY;
+
+    // 보스방 내부에서는 아레나 배경 렌더링
+    if (this.bossRoomSystem.isInBossRoom()) {
+      this.bossRoomSystem.draw(ctx, this.camera);
+      // 공중전 오버레이
+      this.aerialSystem.draw(ctx);
+      // 보스방 내에서도 투사체/파티클/플레이어/HUD 렌더링
+      this._drawBossRoomEntities(ctx, cx, cy);
+      return;
+    }
 
     // Map background
     renderMap(ctx, this.map, this.camera);
@@ -813,7 +942,93 @@ export default class CombatEngine {
     });
     ctx.globalAlpha = 1;
 
+    // 보스방 게이트 (일반 필드에서 표시)
+    if (this.bossRoomSystem.phase === BOSS_ROOM_PHASE.GATE_ACTIVE) {
+      this.bossRoomSystem.draw(ctx, this.camera);
+    }
+    // 보스방 진입 전환 연출
+    if (this.bossRoomSystem.phase === BOSS_ROOM_PHASE.ENTERING) {
+      this.bossRoomSystem.draw(ctx, this.camera);
+    }
+
     // HUD (on top)
+    this._drawHUD(ctx);
+  }
+
+  // ── 보스방 내 엔티티 렌더링 ──
+  _drawBossRoomEntities(ctx, cx, cy) {
+    // Projectiles
+    this.projectiles.forEach(p => {
+      const sx = p.x - cx;
+      const sy = p.y - cy;
+      ctx.font = `${Math.round(p.radius * 3)}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.emoji, sx, sy);
+    });
+
+    // Spirits
+    this.spirits.forEach(s => {
+      const sx = s.x - cx;
+      const sy = s.y - cy;
+      ctx.font = '16px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.strokeStyle = (ATTR_GLOW[s.attribute] || 'rgba(255,255,255,0.3)');
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillText(s.emoji, sx, sy);
+    });
+
+    // Slot heroes
+    this.slotHeroes.forEach(h => {
+      const sx = h.x - cx;
+      const sy = h.y - cy;
+      ctx.font = '18px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(h.emoji, sx, sy);
+    });
+
+    // Pet
+    if (this.pet) {
+      const sx = this.pet.x - cx;
+      const sy = this.pet.y - cy;
+      ctx.font = '16px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(134,239,172,0.5)';
+      ctx.shadowBlur = 8;
+      ctx.fillText(this.pet.emoji, sx, sy);
+      ctx.shadowBlur = 0;
+    }
+
+    // Player
+    this._drawPlayer(ctx, cx, cy);
+
+    // Particles
+    this.particles.forEach(p => {
+      const sx = p.x - cx;
+      const sy = p.y - cy;
+      const alpha = Math.max(0, p.life / 1200);
+      ctx.globalAlpha = alpha;
+      if (p.type === 'text') {
+        ctx.font = 'bold 14px "Noto Sans KR", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, sx, sy);
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(sx, sy, p.size || 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+    ctx.globalAlpha = 1;
+
+    // HUD
     this._drawHUD(ctx);
   }
 
@@ -908,9 +1123,7 @@ export default class CombatEngine {
 
     // Background panel
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.beginPath();
-    ctx.roundRect(pad - 4, pad - 4, barW + 8, 70, 8);
-    ctx.fill();
+    this._fillRoundRect(ctx, pad - 4, pad - 4, barW + 8, 70, 8);
 
     // Wave text
     ctx.fillStyle = '#fbbf24';
@@ -977,6 +1190,21 @@ export default class CombatEngine {
   // ══════════════════════════════════════
   //  HELPERS
   // ══════════════════════════════════════
+  _fillRoundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   _findNearest(from, list) {
     let nearest = null, minDist = Infinity;
     for (const e of list) {
