@@ -85,8 +85,13 @@ const GameState = {
     totalGold: 0,
     stagesCleared: 0,
     spiritsSummoned: 0,
-    enemiesDefeated: 0
+    enemiesDefeated: 0,
+    towerFloor: 1,
+    survivalBestWave: 0,
   },
+
+  // Settings (graphics/sound/gameplay)
+  settings: null,
 
   // 초보자 도우미 (세계의 어머니)
   firstPlayDate: null,       // 첫 플레이 시각 (timestamp)
@@ -324,6 +329,7 @@ const GameState = {
       heroUpgrade: this.heroUpgrade,
       firstPlayDate: this.firstPlayDate,
       helperDismissed: this.helperDismissed,
+      settings: this.settings,
     };
   },
 
@@ -373,6 +379,7 @@ const GameState = {
       heroUpgrade: data.heroUpgrade ?? null,
       firstPlayDate: data.firstPlayDate ?? null,
       helperDismissed: data.helperDismissed ?? false,
+      settings: data.settings ?? null,
     });
     EventBus.emit('state:loaded');
   },
@@ -404,6 +411,7 @@ const GameState = {
     this.stats = { totalGold: 0, stagesCleared: 0, spiritsSummoned: 0, enemiesDefeated: 0 };
     this.firstPlayDate = null;
     this.helperDismissed = false;
+    this.settings = null;
     EventBus.emit('state:reset');
   }
 };

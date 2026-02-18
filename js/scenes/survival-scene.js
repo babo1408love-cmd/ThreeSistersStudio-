@@ -50,7 +50,7 @@ const PURIFY_STATE = {
 
 export { SURVIVAL_BIOMES, SURVIVAL_UPGRADES, PURIFY_STATE };
 
-export default class SurvivalScene {
+class SurvivalEngine {
   constructor(canvas, options = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
@@ -809,5 +809,154 @@ export default class SurvivalScene {
     this.canvas.removeEventListener('mousedown', this._onMouseDown);
     window.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('mouseup', this._onMouseUp);
+  }
+}
+
+// ══════════════════════════════════════
+//  Scene Wrapper for SceneManager
+// ══════════════════════════════════════
+import SceneManager from '../core/scene-manager.js';
+import SaveManager from '../core/save-manager.js';
+import StaminaSystem from '../systems/stamina-system.js';
+import CurrencySystem from '../systems/currency-system.js';
+
+export default class SurvivalScene {
+  onCreate(params) {
+    this._engine = null;
+    this._biomeId = params?.biomeId || null;
+  }
+
+  render() {
+    if (!this._biomeId) {
+      this._showBiomeSelect();
+    } else {
+      this._startSurvival(this._biomeId);
+    }
+  }
+
+  _showBiomeSelect() {
+    const maxRegion = Math.min(10, Math.ceil((GameState.currentStage || 1) / 20) + 1);
+
+    this.el.innerHTML = `
+      <div class="survival-select">
+        <div class="sv-header">
+          <button class="btn btn-secondary" id="sv-back">← 돌아가기</button>
+          <h2>⚔️ 서바이벌 모드</h2>
+        </div>
+        <p class="sv-desc">무한 웨이브에 도전! 적을 정화하여 동료로 만드세요.</p>
+        <div class="sv-biome-list">
+          ${SURVIVAL_BIOMES.map((b, i) => {
+            const locked = i >= maxRegion;
+            return `
+              <div class="sv-biome ${locked ? 'sv-locked' : ''}" data-biome="${b.id}">
+                <span class="sv-biome-emoji">${locked ? '🔒' : b.emoji}</span>
+                <span class="sv-biome-name">${locked ? '???' : b.name}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      <style>
+        .survival-select { padding: 12px; max-width: 500px; margin: 0 auto; }
+        .sv-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .sv-header h2 { flex: 1; text-align: center; font-size: 20px; color: #f0e6d2; margin: 0; }
+        .sv-desc { font-size: 13px; color: #888; text-align: center; margin-bottom: 16px; }
+        .sv-biome-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        .sv-biome {
+          display: flex; align-items: center; gap: 8px; padding: 12px;
+          background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 10px; cursor: pointer; transition: background 0.2s;
+        }
+        .sv-biome:hover:not(.sv-locked) { background: rgba(255,255,255,0.12); }
+        .sv-locked { opacity: 0.4; cursor: not-allowed; }
+        .sv-biome-emoji { font-size: 24px; }
+        .sv-biome-name { font-size: 13px; color: #f0e6d2; }
+      </style>
+    `;
+
+    this.el.querySelector('#sv-back').onclick = () => SceneManager.go('menu');
+    this.el.querySelectorAll('.sv-biome:not(.sv-locked)').forEach(el => {
+      el.onclick = () => {
+        if (!StaminaSystem.spend('survival')) {
+          alert('스태미나가 부족합니다!');
+          return;
+        }
+        this._biomeId = el.dataset.biome;
+        this._startSurvival(this._biomeId);
+      };
+    });
+  }
+
+  _startSurvival(biomeId) {
+    this.el.innerHTML = '';
+    this.el.className = 'scene survival-scene';
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'combat-canvas';
+    canvas.width = Math.min(window.innerWidth, 900);
+    canvas.height = Math.min(window.innerHeight - 40, 600);
+    this.el.appendChild(canvas);
+
+    const controlBar = document.createElement('div');
+    controlBar.className = 'combat-control-bar';
+    controlBar.innerHTML = `
+      <div class="combat-ctrl-info"><span>서바이벌: ${SURVIVAL_BIOMES.find(b => b.id === biomeId)?.name || biomeId}</span></div>
+      <button class="btn btn-secondary btn-sm" id="sv-quit">포기</button>
+    `;
+    this.el.appendChild(controlBar);
+
+    controlBar.querySelector('#sv-quit').onclick = () => {
+      if (confirm('서바이벌을 포기하시겠습니까?')) {
+        this._onSurvivalEnd();
+      }
+    };
+
+    this._engine = new SurvivalEngine(canvas, {
+      biomeId,
+      onGameOver: (result) => this._onSurvivalEnd(result),
+    });
+    this._engine.start();
+  }
+
+  _onSurvivalEnd(result) {
+    if (this._engine) {
+      this._engine.stop();
+      this._engine = null;
+    }
+
+    const wave = result?.wave || 0;
+    const kills = result?.kills || 0;
+    const purified = result?.purified || 0;
+    const gold = result?.gold || 0;
+
+    // Grant rewards
+    if (gold > 0) CurrencySystem.add('gold', gold, 'survival');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'victory-overlay';
+    overlay.innerHTML = `
+      <div class="victory-overlay__title">⚔️ 서바이벌 종료</div>
+      <div class="victory-stats" style="margin:10px 0;">
+        <span>🌊 웨이브: ${wave}</span>
+        <span>💀 처치: ${kills}</span>
+        <span>💚 정화: ${purified}</span>
+        <span>💰 골드: ${gold}</span>
+      </div>
+      <button class="btn btn-primary btn-lg" id="sv-return">메인으로 돌아가기</button>
+    `;
+    this.el.appendChild(overlay);
+    overlay.querySelector('#sv-return').onclick = () => {
+      SaveManager.save();
+      SceneManager.go('menu');
+    };
+  }
+
+  onEnter() {}
+
+  onLeave() {
+    if (this._engine) {
+      this._engine.stop();
+      this._engine = null;
+    }
   }
 }
