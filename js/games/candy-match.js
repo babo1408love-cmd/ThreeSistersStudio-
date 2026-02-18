@@ -72,6 +72,12 @@ export default class CandyMatch {
     this._dragTimerId = null;
     this._dragTimeLeft = 0;
 
+    // 매치 카운트 기반 클리어 (60매치)
+    this._matchCount = 0;
+    this._matchTarget = 60;
+    this._fragmentSets = 0;       // 완성된 조각 세트 수 (매치 6개당 1세트)
+    this._fragmentProgress = 0;   // 현재 조각 진행 (0~5)
+
     // 초보자 도우미 상태
     this._helperActive = isHelperActive(GameState);
     this._tilesDestroyed = 0;
@@ -848,12 +854,8 @@ export default class CandyMatch {
     if (this._destroyed) return;
     if (this._introPhase) { this._renderIntro(); return; }
 
-    const cleared = this._helperActive
-      ? this._tilesDestroyed >= this._tileTarget
-      : this.score >= this.targetScore;
-    const progress = this._helperActive
-      ? Math.min(100, this._tilesDestroyed / this._tileTarget * 100)
-      : Math.min(100, this.score / this.targetScore * 100);
+    const cleared = this._matchCount >= this._matchTarget;
+    const progress = Math.min(100, this._matchCount / this._matchTarget * 100);
     const totalCols = this.cols + 2;
     const totalRows = this.rows + 2;
     const cellSize = 40;
@@ -867,9 +869,12 @@ export default class CandyMatch {
       else if (progress >= 80) this._helperMsg = MOTHER_OF_WORLD.dialogues.almostClear;
     }
 
-    const infoText = this._helperActive
-      ? `🌍 타일 파괴: ${this._tilesDestroyed}/${this._tileTarget} | 남은 이동: ${this.moves} | 콤보: ${this.totalCombo}`
-      : `🍬 점수: ${this.score}/${this.targetScore} | 남은 이동: ${this.moves} | 콤보: ${this.totalCombo}`;
+    // 조각 진행 바 (6개 중 현재까지)
+    const fragBar = Array.from({length: 6}, (_, i) =>
+      i < this._fragmentProgress ? '▶️' : '⬛'
+    ).join('');
+
+    const infoText = `🔗 매치: ${this._matchCount}/${this._matchTarget} | 남은 이동: ${this.moves} | 🔮 조각: ${fragBar} (${this._fragmentProgress}/6) | 세트: ${this._fragmentSets}`;
 
     const helperBarHtml = this._helperActive ? `
         <div class="helper-bar" id="helper-bar">
@@ -1036,6 +1041,9 @@ export default class CandyMatch {
         }
         this._removeInitialMatches();
         if (this._helperActive) this._tilesDestroyed = 0;
+        this._matchCount = 0;
+        this._fragmentSets = 0;
+        this._fragmentProgress = 0;
         this._render();
       };
     }
@@ -1119,12 +1127,15 @@ export default class CandyMatch {
   _updateInfoBar() {
     const info = this.container.querySelector('#candy-info');
     if (info) {
-      info.textContent = `🍬 점수: ${this.score}/${this.targetScore} | 남은 이동: ${this.moves} | 콤보: ${this.totalCombo}`;
+      const fragBar = Array.from({length: 6}, (_, i) =>
+        i < this._fragmentProgress ? '▶️' : '⬛'
+      ).join('');
+      info.textContent = `🔗 매치: ${this._matchCount}/${this._matchTarget} | 남은 이동: ${this.moves} | 🔮 ${this._fragmentProgress}/6 | 세트: ${this._fragmentSets}`;
     }
     // Update progress bar too
     const fill = this.container.querySelector('.progress-fill');
     if (fill) {
-      const pct = Math.min(100, this.score / this.targetScore * 100);
+      const pct = Math.min(100, this._matchCount / this._matchTarget * 100);
       fill.style.width = pct + '%';
     }
   }
@@ -1132,10 +1143,7 @@ export default class CandyMatch {
   // --- P&D Drag (Puzzle & Dragons style) ---
 
   _handleMouseDown(r, c, e) {
-    const isClearedCheck = this._helperActive
-      ? this._tilesDestroyed >= this._tileTarget
-      : this.score >= this.targetScore;
-    if (this.isProcessing || this.moves <= 0 || isClearedCheck) return;
+    if (this.isProcessing || this.moves <= 0 || this._matchCount >= this._matchTarget) return;
     if (this._isSpecial(r, c)) return;
 
     this._dragging = true;
@@ -1427,6 +1435,17 @@ export default class CandyMatch {
       totalMatchedCells += matchedKeys.length;
       if (this._helperActive) this._tilesDestroyed += matchedKeys.length;
       this.comboCount++;
+
+      // 매치 그룹 수만큼 매치 카운트 증가 + 조각 진행
+      this._matchCount += matchGroups.length;
+      for (let mg = 0; mg < matchGroups.length; mg++) {
+        this._fragmentProgress++;
+        if (this._fragmentProgress >= 6) {
+          this._fragmentProgress = 0;
+          this._fragmentSets++;
+          showToast(`✨ 정령 조각 완성! (보유: ${this._fragmentSets}세트)`);
+        }
+      }
       this.totalCombo = Math.max(this.totalCombo, this.comboCount);
 
       // Track which gem types were matched (for spirit item generation)
