@@ -230,10 +230,10 @@ export default class Stage1Scene {
 
   _updateStatusBar() {
     if (!this._statusBar) return;
-    const matchCount = this._candyMatch ? this._candyMatch.getMatchCount() : 0;
+    const progressText = this._candyMatch ? this._candyMatch.getProgressText() : '매치: 0/60';
     const diceVal = this._lastDiceValue > 0 ? `🎲 ${this._lastDiceValue}` : '🎲 -';
     const marblePos = `📍 ${this._marble.playerPos + 1}/30`;
-    this._statusBar.textContent = `매치: ${matchCount}/60 | ${diceVal} | ${marblePos}`;
+    this._statusBar.textContent = `${progressText} | ${diceVal} | ${marblePos}`;
   }
 
   onLeave() {

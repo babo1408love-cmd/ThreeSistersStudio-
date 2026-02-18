@@ -865,8 +865,10 @@ export default class CandyMatch {
     if (this._destroyed) return;
     if (this._introPhase) { this._renderIntro(); return; }
 
-    const cleared = this._matchCount >= this._matchTarget;
-    const progress = Math.min(100, this._matchCount / this._matchTarget * 100);
+    const cleared = this._checkCleared();
+    const progress = this._helperActive
+      ? Math.min(100, this._tilesDestroyed / this._tileTarget * 100)
+      : Math.min(100, this._matchCount / this._matchTarget * 100);
     const totalCols = this.cols + 2;
     const totalRows = this.rows + 2;
     const cellSize = 40;
@@ -885,7 +887,10 @@ export default class CandyMatch {
       i < this._fragmentProgress ? '▶️' : '⬛'
     ).join('');
 
-    const infoText = `🔗 매치: ${this._matchCount}/${this._matchTarget} | 남은 이동: ${this.moves} | 🔮 조각: ${fragBar} (${this._fragmentProgress}/6) | 세트: ${this._fragmentSets}`;
+    const goalText = this._helperActive
+      ? `💥 타일 파괴: ${this._tilesDestroyed}/${this._tileTarget}`
+      : `🔗 매치: ${this._matchCount}/${this._matchTarget}`;
+    const infoText = `${goalText} | 남은 이동: ${this.moves} | 🔮 조각: ${fragBar} (${this._fragmentProgress}/6) | 세트: ${this._fragmentSets}`;
 
     const helperBarHtml = this._helperActive ? `
         <div class="helper-bar" id="helper-bar">
@@ -1154,7 +1159,7 @@ export default class CandyMatch {
   // --- P&D Drag (Puzzle & Dragons style) ---
 
   _handleMouseDown(r, c, e) {
-    if (this._externalLock || this.isProcessing || this.moves <= 0 || this._matchCount >= this._matchTarget) return;
+    if (this._externalLock || this.isProcessing || this.moves <= 0 || this._checkCleared()) return;
     if (this._isSpecial(r, c)) return;
 
     this._dragging = true;
@@ -1253,7 +1258,7 @@ export default class CandyMatch {
               matchCount: matchesMade,
               totalMatches: this._matchCount,
               combo: this.totalCombo,
-              cleared: this._matchCount >= this._matchTarget,
+              cleared: this._checkCleared(),
             });
           }
         }
@@ -1462,8 +1467,8 @@ export default class CandyMatch {
       // 매치 그룹 수만큼 매치 카운트 증가 + 조각 진행
       this._matchCount += matchGroups.length;
 
-      // ★ 60매치 달성 시 즉시 루프 종료 (강제 클리어)
-      if (this._matchCount >= this._matchTarget) {
+      // ★ 클리어 달성 시 즉시 루프 종료 (강제 클리어)
+      if (this._checkCleared()) {
         this.comboCount = 0;
         return;
       }
@@ -2511,9 +2516,25 @@ export default class CandyMatch {
     return this._matchCount;
   }
 
-  /** 클리어 여부 조회 */
-  isCleared() {
+  /** 진행 상황 텍스트 (도우미 활성 시 타일 파괴 수 표시) */
+  getProgressText() {
+    if (this._helperActive) {
+      return `타일: ${this._tilesDestroyed}/${this._tileTarget}`;
+    }
+    return `매치: ${this._matchCount}/${this._matchTarget}`;
+  }
+
+  /** 내부 클리어 판정 (도우미 활성 시: 타일 파괴 수 기준) */
+  _checkCleared() {
+    if (this._helperActive) {
+      return this._tilesDestroyed >= this._tileTarget;
+    }
     return this._matchCount >= this._matchTarget;
+  }
+
+  /** 클리어 여부 조회 (외부 API) */
+  isCleared() {
+    return this._checkCleared();
   }
 
   destroy() {
