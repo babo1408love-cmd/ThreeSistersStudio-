@@ -2,7 +2,10 @@
  * enemy-drop-generator.js — 적/동료/드롭 생성기
  * 적 10종+보스 4종, 동료 6종, 드롭: 골드/장비15종/소비7종/파편/진화재료9종/소환서
  * generateWave 웨이브 시스템
+ * BalanceAI 자동 밸런싱 연동
  */
+import GameState from '../core/game-state.js';
+import UnitFactory from '../data/unit-factory.js';
 
 // ── 슬라임 적 10종 (귀여운 둥근) ──
 export const ENEMIES = {
@@ -102,97 +105,23 @@ export function generateDrop(enemyDef, waveNum = 1) {
   return drops;
 }
 
-// ── 웨이브 생성 ──
-export function generateWave(waveNum, stageLevel = 1) {
-  const scaling = 1 + (stageLevel - 1) * 0.05 + (waveNum - 1) * 0.06;
-  const enemyKeys = Object.keys(ENEMIES);
-
-  // Slime types by wave
-  let pool, count;
-  if (waveNum === 1) {
-    pool = ['pink_slime'];
-    count = 3;
-  } else if (waveNum === 2) {
-    pool = ['pink_slime','blue_slime','green_slime'];
-    count = 4;
-  } else if (waveNum === 3) {
-    pool = ['pink_slime','blue_slime','green_slime','purple_slime','gold_slime'];
-    count = 6;
-  } else {
-    pool = enemyKeys;
-    count = 5 + waveNum;
-  }
-
-  const enemies = [];
-  for (let i = 0; i < count; i++) {
-    const key = pool[Math.floor(Math.random() * pool.length)];
-    const def = ENEMIES[key];
-    enemies.push({
-      ...def,
-      hp: Math.round(def.hp * scaling),
-      maxHp: Math.round(def.hp * scaling),
-      atk: Math.round(def.atk * scaling),
-      def: Math.round(def.def * scaling),
-    });
-  }
-
-  // Gold slime guaranteed in wave 3+
-  if (waveNum >= 3 && !enemies.find(e => e.id === 'gold_slime')) {
-    const gs = ENEMIES.gold_slime;
-    enemies.push({
-      ...gs,
-      hp: Math.round(gs.hp * scaling),
-      maxHp: Math.round(gs.hp * scaling),
-      atk: Math.round(gs.atk * scaling),
-      def: Math.round(gs.def * scaling),
-    });
-  }
-
-  // 5웨이브마다 미니보스
-  let boss = null;
-  if (waveNum > 0 && waveNum % 5 === 0) {
-    const bossKeys = Object.keys(BOSSES);
-    const idx = ((Math.floor(waveNum / 5) - 1) % bossKeys.length + bossKeys.length) % bossKeys.length;
-    const bossKey = bossKeys[idx];
-    const b = BOSSES[bossKey];
-    boss = {
-      ...b,
-      isBoss: true,
-      hp: Math.round(b.hp * scaling),
-      maxHp: Math.round(b.hp * scaling),
-      atk: Math.round(b.atk * scaling),
-      def: Math.round(b.def * scaling),
-    };
-  }
-
-  return { waveNum, enemies, boss, scaling };
+// ── 웨이브 생성 (UnitFactory 경유) ──
+export function generateWave(waveNum, stageLevel = 1, playerPower = 0) {
+  return UnitFactory.createWave(waveNum, stageLevel, playerPower, ENEMIES, BOSSES);
 }
 
-// ── 보스 전용 웨이브 ──
+// ── 보스 전용 웨이브 (UnitFactory 경유) ──
 export function generateBossWave(bossId, stageLevel = 1) {
   const b = BOSSES[bossId] || BOSSES.king_slime;
   const scaling = 1 + (stageLevel - 1) * 0.15;
-  const boss = {
-    ...b,
-    isBoss: true,
-    hp: Math.round(b.hp * scaling),
-    maxHp: Math.round(b.hp * scaling),
-    atk: Math.round(b.atk * scaling),
-    def: Math.round(b.def * scaling),
-  };
+  const boss = UnitFactory.createBoss(b, scaling, {});
   // Minions
   const minions = [];
   for (let i = 0; i < 3; i++) {
     const keys = Object.keys(ENEMIES);
     const key = keys[Math.floor(Math.random() * keys.length)];
     const e = ENEMIES[key];
-    minions.push({
-      ...e,
-      hp: Math.round(e.hp * scaling),
-      maxHp: Math.round(e.hp * scaling),
-      atk: Math.round(e.atk * scaling),
-      def: Math.round(e.def * scaling),
-    });
+    minions.push(UnitFactory.createEnemy(e, scaling, {}));
   }
   return { waveNum: 'BOSS', enemies: minions, boss, scaling };
 }

@@ -70,6 +70,7 @@ export default class Stage2Scene {
     this._engine = new CombatEngine(canvas, {
       stageLevel: GameState.currentStage,
       maxWaves: waveCount,
+      mapTheme: this._stage.mapTheme || 'fairy_garden',
       onVictory: (result) => this._onVictory(result),
       onDeath: () => this._onDeath(),
     });

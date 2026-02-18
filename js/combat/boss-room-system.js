@@ -9,6 +9,7 @@
  */
 import { BattleArena, ARENA_BOSSES } from '../generators/battle-arena.js';
 import { BOSS_ROOM_CONFIG } from '../data/combat-config.js';
+import UnitFactory from '../data/unit-factory.js';
 
 // 보스방 페이즈
 const PHASE = {
@@ -96,32 +97,26 @@ export default class BossRoomSystem {
       height: arenaConf.height,
     });
 
-    // 보스 생성 (비활성 상태)
+    // 보스 생성 — 플레이어 전방에 스폰 (전맵 배틀아레나)
+    const player = this.engine.player;
     const bossType = this.config.bossType;
     const bossDef = ARENA_BOSSES[bossType];
+    const bossX = player.x + this.engine.W * 0.4;
+    const bossY = player.y;
     if (bossDef) {
       this.boss = this.arena.spawnBoss(bossType);
+      this.boss.x = bossX;
+      this.boss.y = bossY;
       this.bossMaxHp = this.boss.maxHp;
     } else {
-      // ARENA_BOSSES에 없으면 기본 enemy.js 보스 사용
-      this.boss = {
-        id: `boss_${Date.now()}`,
-        name: bossType,
-        emoji: '👹',
-        currentHp: 300,
-        maxHp: 300,
-        hp: 300,
-        atk: 20,
-        def: 10,
-        speed: 1.5,
-        size: 3,
-        x: arenaConf.width * 0.7,
-        y: arenaConf.height * 0.4,
-        alive: true,
-        currentPhase: 0,
-        patterns: [],
-        phases: [],
-      };
+      const fallbackDef = { name: bossType, emoji: '👹', hp: 300, atk: 20, def: 10, speed: 1.5, size: 3 };
+      this.boss = UnitFactory.createArenaBoss(fallbackDef, {
+        x: bossX, y: bossY,
+      });
+      this.boss.id = `boss_${Date.now()}`;
+      this.boss.currentPhase = 0;
+      this.boss.patterns = [];
+      this.boss.phases = [];
       this.bossMaxHp = this.boss.maxHp || this.boss.hp;
     }
   }
@@ -262,14 +257,61 @@ export default class BossRoomSystem {
       this._triggerAerialTransition();
     }
 
-    // 보스 이동 (플레이어 방향)
+    // 보스 이동 (플레이어 방향) — 최소 속도 보장
     const dx = player.x - boss.x;
     const dy = player.y - boss.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const spd = (boss.speed || 1.5) * (boss._spdMult || 1) * (dt / 16) * 0.6;
+    const baseSpd = boss.speed || 1.5;
+    const minSpd = (player.speed || 3) * 0.7;
+    const spd = Math.max(baseSpd, minSpd) * (boss._spdMult || 1) * (dt / 16) * 0.6;
     if (dist > 50) {
       boss.x += (dx / dist) * spd;
       boss.y += (dy / dist) * spd;
+    }
+
+    // ── 보스 원거리 공격 (투사체) ──
+    if (!boss._atkTimer) boss._atkTimer = 0;
+    boss._atkTimer += dt;
+
+    // 분노 모드: HP 30% 이하 → 공격 빈도 1.5배, 투사체 5개
+    const enraged = hpRatio <= 0.3;
+    const atkInterval = enraged ? 1500 : 2500; // ms
+    const fanCount = enraged ? 5 : 3;
+    const atkMult = (boss._atkMult || 1) * (enraged ? 1.5 : 1);
+
+    if (boss._atkTimer >= atkInterval && dist < 500) {
+      boss._atkTimer = 0;
+
+      const bossAtk = (boss.atk || boss.attack || 20) * atkMult;
+      const angle = Math.atan2(dy, dx);
+      const fanSpread = Math.PI / 6; // 30도 부채꼴
+      const projSpeed = 4;
+
+      for (let i = 0; i < fanCount; i++) {
+        const a = angle + (i - (fanCount - 1) / 2) * (fanSpread / Math.max(1, fanCount - 1));
+        this.engine.projectiles.push({
+          x: boss.x, y: boss.y,
+          vx: Math.cos(a) * projSpeed,
+          vy: Math.sin(a) * projSpeed,
+          damage: bossAtk * 0.4,
+          radius: 6,
+          source: 'enemy',
+          color: enraged ? '#ff4444' : '#ff8800',
+          emoji: enraged ? '💀' : '🔥',
+          pierce: 0, homing: false, target: null,
+        });
+      }
+    }
+
+    // ── 접촉 데미지 (기존 기능 강화) ──
+    if (dist < (boss.size || 3) * 14 + 20) {
+      if (!boss._contactTimer) boss._contactTimer = 0;
+      boss._contactTimer += dt;
+      if (boss._contactTimer >= 800) {
+        boss._contactTimer = 0;
+        const contactDmg = (boss.atk || boss.attack || 20) * atkMult * 0.6;
+        this.engine._damagePlayer(contactDmg);
+      }
     }
   }
 
@@ -293,6 +335,60 @@ export default class BossRoomSystem {
       this.boss.hp -= dmg;
     }
     return dmg;
+  }
+
+  // ── 만남 지점에서 바로 보스방 활성화 (BossApproachSystem 전용) ──
+  activateAtPosition(arenaX, arenaY, theme) {
+    // GATE_ACTIVE/ENTERING 건너뛰고 바로 DORMANT로 진입
+    this.enabled = true;
+
+    // config가 없으면 스테이지 매핑에서 가져오거나 기본값
+    if (!this.config) {
+      const mapping = BOSS_ROOM_CONFIG.stageMapping[this.stageId];
+      this.config = mapping || {
+        bossType: 'boss_infected_elder',
+        theme: theme || 'forest_clearing',
+        combatMode: 'ground',
+        modifiers: [],
+      };
+    }
+    if (theme) this.config.theme = theme;
+
+    // 아레나 생성
+    const arenaConf = BOSS_ROOM_CONFIG.arena;
+    this.arena = new BattleArena(theme || this.config.theme || 'fairy_garden', {
+      width: arenaConf.width,
+      height: arenaConf.height,
+    });
+
+    // 보스 생성 — 만남 지점 전방에 스폰
+    const player = this.engine.player;
+    const bossType = this.config.bossType;
+    const bossDef = ARENA_BOSSES[bossType];
+    const bossX = arenaX + this.engine.W * 0.3;
+    const bossY = arenaY;
+
+    if (bossDef) {
+      this.boss = this.arena.spawnBoss(bossType);
+      this.boss.x = bossX;
+      this.boss.y = bossY;
+      this.bossMaxHp = this.boss.maxHp;
+    } else {
+      const fallbackDef = { name: bossType, emoji: '\uD83D\uDC79', hp: 300, atk: 20, def: 10, speed: 1.5, size: 3 };
+      this.boss = UnitFactory.createArenaBoss(fallbackDef, {
+        x: bossX, y: bossY,
+      });
+      this.boss.id = `boss_${Date.now()}`;
+      this.boss.currentPhase = 0;
+      this.boss.patterns = [];
+      this.boss.phases = [];
+      this.bossMaxHp = this.boss.maxHp || this.boss.hp;
+    }
+
+    // DORMANT 진입
+    this.phase = PHASE.DORMANT;
+    this.phaseTimer = 0;
+    this._awakeningStep = 0;
   }
 
   // ── 보스방 활성 여부 ──
@@ -322,16 +418,27 @@ export default class BossRoomSystem {
       case PHASE.VICTORY:
         this._drawArena(ctx);
         this._drawBoss(ctx);
-        if (this._bossHpBarVisible || this.phase === PHASE.ACTIVE) {
-          this._drawBossHpBar(ctx);
-        }
-        if (this.phase === PHASE.AWAKENING) {
-          this._drawAwakeningOverlay(ctx);
-        }
-        if (this.phase === PHASE.VICTORY) {
-          this._drawVictoryOverlay(ctx);
-        }
+        // 오버레이(HP바, 텍스트)는 drawOverlays()에서 HUD 위에 렌더링
         break;
+    }
+  }
+
+  /**
+   * HUD 위에 그려야 하는 오버레이들 (보스 HP바, 깨어남/승리 텍스트).
+   * _draw() 이후, HUD 이후에 호출해야 자막이 UI를 가리지 않음.
+   */
+  drawOverlays(ctx) {
+    if (!this.enabled) return;
+    if (!this.isInBossRoom()) return;
+
+    if (this._bossHpBarVisible || this.phase === PHASE.ACTIVE) {
+      this._drawBossHpBar(ctx);
+    }
+    if (this.phase === PHASE.AWAKENING) {
+      this._drawAwakeningOverlay(ctx);
+    }
+    if (this.phase === PHASE.VICTORY) {
+      this._drawVictoryOverlay(ctx);
     }
   }
 
@@ -382,36 +489,32 @@ export default class BossRoomSystem {
     ctx.restore();
   }
 
-  // ── 아레나 배경 렌더링 ──
+  // ── 아레나 배경 렌더링 (카메라 스크롤) ──
   _drawArena(ctx) {
     if (!this.arena) return;
     ctx.save();
-    // 아레나를 캔버스에 맞춰 스케일
-    const scaleX = ctx.canvas.width / this.arena.width;
-    const scaleY = ctx.canvas.height / this.arena.height;
-    const scale = Math.min(scaleX, scaleY);
-    ctx.scale(scale, scale);
+    // 전맵 크기 아레나 — 카메라 오프셋으로 스크롤
+    const cam = this.engine.camera;
+    ctx.translate(-cam.x, -cam.y);
     this.arena.render(ctx);
     ctx.restore();
   }
 
-  // ── 보스 렌더링 ──
+  // ── 보스 렌더링 (카메라 스크롤) ──
   _drawBoss(ctx) {
     if (!this.boss) return;
     const bossHp = this.boss.currentHp !== undefined ? this.boss.currentHp : this.boss.hp;
     if (bossHp <= 0 && this.phase !== PHASE.VICTORY) return;
 
-    const scaleX = ctx.canvas.width / (this.arena ? this.arena.width : 800);
-    const scaleY = ctx.canvas.height / (this.arena ? this.arena.height : 600);
-    const scale = Math.min(scaleX, scaleY);
-    const sx = this.boss.x * scale;
-    const sy = this.boss.y * scale;
+    const cam = this.engine.camera;
+    const sx = this.boss.x - cam.x;
+    const sy = this.boss.y - cam.y;
     const bossSize = (this.boss.size || 3) * 14;
 
     ctx.save();
 
     // 보스 본체
-    const fontSize = bossSize * scale;
+    const fontSize = bossSize;
     ctx.font = `${fontSize}px serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -512,19 +615,7 @@ export default class BossRoomSystem {
       }
     }
 
-    // "보스 출현!" 텍스트
-    if (this._awakeningStep >= 2) {
-      ctx.save();
-      ctx.fillStyle = '#ff6b6b';
-      ctx.font = 'bold 24px "Noto Sans KR", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(255,0,0,0.5)';
-      ctx.shadowBlur = 20;
-      ctx.fillText(`${this.boss?.emoji || '👹'} ${this.boss?.name || '보스'} 출현!`, W / 2, H * 0.3);
-      ctx.shadowBlur = 0;
-      ctx.restore();
-    }
+    // "보스 출현!" 텍스트 — 실시간 자막 비활성화
   }
 
   // ── 승리 오버레이 ──
@@ -541,16 +632,8 @@ export default class BossRoomSystem {
       ctx.fillRect(0, 0, W, H);
     }
 
-    // "승리!" 텍스트
-    if (t > 0.5) {
-      ctx.fillStyle = '#fbbf24';
-      ctx.font = 'bold 28px "Noto Sans KR", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(251,191,36,0.6)';
-      ctx.shadowBlur = 15;
-      ctx.fillText('🎉 보스 처치!', W / 2, H * 0.4);
-      ctx.shadowBlur = 0;
+    // "승리!" 텍스트 — 실시간 자막 비활성화
+    if (false) {
     }
 
     ctx.restore();

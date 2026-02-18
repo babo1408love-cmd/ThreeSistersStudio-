@@ -2,11 +2,10 @@
  * Stage 1 Integrated Scene — 캔디매치 → 주사위 → 마블 보드 통합
  * 한 화면에서 끊김 없이 순환:
  *   ① 캔디매치 드래그 (퍼즐앤드래곤)
- *   ② 매치 있으면 → 자동 주사위 (1.5초)
- *   ③ 주사위 결과 → 마블 보드 이동 (칸당 0.3초)
- *   ④ 도착 칸 이벤트 실행
- *   ⑤ 이벤트 끝 → 다시 캔디매치
- *   매치 60개 달성 → 스테이지 클리어!
+ *   ② 매치 있으면 → 보드 내 자동 주사위 + 영웅 이동
+ *   ③ 도착 칸 아이템 자동 수집
+ *   ④ 다시 캔디매치
+ *   매치 180개 달성 → 스테이지 클리어!
  */
 import SceneManager from '../core/scene-manager.js';
 import GameState from '../core/game-state.js';
@@ -16,28 +15,34 @@ import { getStage } from '../data/stages.js';
 import { createHudBar } from '../ui/hud.js';
 import { showToast, showConfetti } from '../ui/toast.js';
 import CandyMatch from '../games/candy-match.js';
-import DiceSystem from '../games/dice-system.js';
-import MarbleBoard from '../games/marble-board.js';
-import { executeTileEvent } from '../games/marble-events.js';
+import StageTimer from '../systems/stage-timer.js';
+import { showDragTutorial } from '../systems/drag-tutorial.js';
 
 const PHASE_LABELS = {
   candy:  '🍬 보석을 드래그하세요!',
   dice:   '🎲 주사위 굴리는 중...',
   marble: '🎯 이동 중...',
-  event:  '📦 이벤트!',
   clear:  '🎉 스테이지 클리어!',
 };
 
 export default class Stage1Scene {
   onCreate(params) {
     this._stage = getStage(GameState.currentStage);
-    this._phase = 'candy'; // candy | dice | marble | event | clear
+    this._phase = 'candy'; // candy | dice | marble | clear
+    this._isHeroMoving = false; // 마블 이동 중 플래그 (캔디 비차단)
     this._candyMatch = null;
-    this._dice = new DiceSystem();
-    this._marble = new MarbleBoard();
-    this._lastDiceValue = 0;
+    if (GameState.currentStage <= 2) {
+      GameState.helperDismissed = false;  // 스테이지 1-2에서는 도우미 재활성
+    }
     GameState.initFirstPlay();
     GameState.resetStageProgress();
+
+    // ⏰ 3분 타이머
+    this._stageTimer = new StageTimer({
+      duration: 180000,
+      onTimeUp: () => this._onTimerEnd(),
+    });
+    this._timerInterval = null;
   }
 
   render() {
@@ -47,42 +52,53 @@ export default class Stage1Scene {
     const hud = createHudBar();
     this.el.appendChild(hud);
 
-    // 통합 레이아웃
+    // 통합 레이아웃 (캔디 보드에 마블/인벤토리/보물상자 모두 포함)
     const layout = document.createElement('div');
     layout.id = 'stage1-integrated';
     layout.innerHTML = `
       <div class="s1-phase-bar" id="s1-phase-bar">
         <span class="s1-phase-label" id="s1-phase-label">${PHASE_LABELS.candy}</span>
+        <span id="s1-timer-slot"></span>
       </div>
       <div class="s1-candy-area" id="s1-candy-area"></div>
-      <div class="s1-dice-area" id="s1-dice-area"></div>
-      <div class="s1-marble-area" id="s1-marble-area"></div>
       <div class="s1-status-bar" id="s1-status-bar"></div>
     `;
     this.el.appendChild(layout);
 
     // 각 영역 참조
     this._candyArea = layout.querySelector('#s1-candy-area');
-    this._diceArea = layout.querySelector('#s1-dice-area');
-    this._marbleArea = layout.querySelector('#s1-marble-area');
     this._phaseLabel = layout.querySelector('#s1-phase-label');
     this._statusBar = layout.querySelector('#s1-status-bar');
 
-    // 주사위 시스템 렌더링
-    this._dice.renderTo(this._diceArea);
+    // ⏰ 타이머 DOM 삽입
+    const timerSlot = layout.querySelector('#s1-timer-slot');
+    if (timerSlot) {
+      timerSlot.appendChild(this._stageTimer.createDOM());
+    }
 
-    // 마블 보드 렌더링
-    this._marble.renderTo(this._marbleArea);
-
-    // 캔디매치 생성 (통합 모드: skipIntro, onTurnEnd)
+    // 캔디매치 생성 (풀 보드: 마블 보더 + 인벤토리 + 보물상자)
     this._candyMatch = new CandyMatch(this._candyArea, {
       targetScore: this._stage.candy.targetScore,
       moves: this._stage.candy.moves,
       cols: this._stage.candy.cols,
       rows: this._stage.candy.rows,
+      matchTarget: this._stage.candy.matchTarget,
+      gemCount: this._stage.candy.gemCount,
       skipIntro: true,
+      compactMode: false,
       onTurnEnd: (result) => this._onCandyTurnEnd(result),
       onComplete: (result) => this._onStageClear(result),
+    });
+
+    // ★ 드래그 튜토리얼 (시스템) → 완료 후 타이머 시작
+    this._candyMatch.setLocked(true);
+    showDragTutorial().then(() => {
+      this._candyMatch.setLocked(false);
+      this._stageTimer.start();
+      this._timerInterval = setInterval(() => {
+        this._stageTimer.update(100);
+        this._stageTimer.updateDOM();
+      }, 100);
     });
 
     this._updateStatusBar();
@@ -97,73 +113,47 @@ export default class Stage1Scene {
       return;
     }
 
-    // 매치 있으면 → 주사위
+    // 마블 이동 중이면 주사위 안 굴림 (매치 카운트만 반영됨)
+    if (this._isHeroMoving) return;
+
+    // 매치 있으면 → 보드 내 주사위 + 영웅 이동
     if (result.matchCount > 0) {
       this._startDicePhase(result);
     }
     // 매치 없으면 그냥 다시 캔디 (아무것도 안 함)
   }
 
-  // ── Phase 1: 주사위 ──
+  // ── Phase: 주사위 + 마블 이동 (보드 내장) ──
 
   _startDicePhase(matchResult) {
     this._phase = 'dice';
+    this._isHeroMoving = true;
     this._updatePhaseLabel();
-    this._candyMatch.setLocked(true);
+    // ★ setLocked 하지 않음 — 마블 이동 중에도 캔디 드래그 가능
 
     // 콤보 5 이상이면 보너스 +1
     const bonus = matchResult.combo >= 5 ? 1 : 0;
 
-    // 0.5초 후 주사위 굴리기 (매치 애니메이션 여운)
+    // 특수 주사위 소비 (있으면 사용)
+    const specialType = GameState.useSpecialDice() || 'normal';
+
+    // 0.5초 후 주사위 굴리기 + 영웅 이동 (candy-match 내장)
     setTimeout(() => {
-      this._dice.roll(bonus, (diceValue) => {
-        this._lastDiceValue = diceValue;
+      this._phase = 'marble';
+      this._updatePhaseLabel();
+
+      this._candyMatch.externalDiceRoll(bonus, () => {
         this._updateStatusBar();
-        this._startMarblePhase(diceValue);
-      });
+        this._onMoveComplete();
+      }, specialType, 'normal');
     }, 500);
   }
 
-  // ── Phase 2: 마블 이동 ──
+  // ── 이동 완료 → 다시 캔디매치 ──
 
-  _startMarblePhase(diceValue) {
-    this._phase = 'marble';
-    this._updatePhaseLabel();
+  _onMoveComplete() {
+    this._isHeroMoving = false;
 
-    // 0.5초 후 이동 시작
-    setTimeout(() => {
-      this._marble.movePlayer(diceValue, (landedTile) => {
-        this._updateStatusBar();
-        this._startEventPhase(landedTile);
-      });
-    }, 500);
-  }
-
-  // ── Phase 3: 칸 이벤트 ──
-
-  _startEventPhase(tile) {
-    this._phase = 'event';
-    this._updatePhaseLabel();
-
-    // 시작 칸은 팝업 없이 즉시 처리
-    if (tile.type === 'start') {
-      executeTileEvent(tile, () => {
-        this._onEventComplete();
-      });
-      return;
-    }
-
-    // 0.3초 후 이벤트 실행
-    setTimeout(() => {
-      executeTileEvent(tile, () => {
-        this._onEventComplete();
-      });
-    }, 300);
-  }
-
-  // ── 이벤트 완료 → 다시 캔디매치 ──
-
-  _onEventComplete() {
     // 클리어 체크
     if (this._candyMatch && this._candyMatch.isCleared()) {
       this._onStageClear({});
@@ -172,8 +162,7 @@ export default class Stage1Scene {
 
     this._phase = 'candy';
     this._updatePhaseLabel();
-    this._dice.hide();
-    this._candyMatch.setLocked(false);
+    // ★ setLocked 불필요 — 이미 잠기지 않았음
     this._updateStatusBar();
   }
 
@@ -184,24 +173,49 @@ export default class Stage1Scene {
     this._phase = 'clear';
     this._updatePhaseLabel();
     if (this._candyMatch) this._candyMatch.setLocked(true);
+    // 타이머 정지
+    if (this._stageTimer) this._stageTimer.pause();
+    if (this._timerInterval) { clearInterval(this._timerInterval); this._timerInterval = null; }
 
-    // 보상 지급
-    const goldReward = (result && result.score) || 200;
+    // BalanceAI 보상 계산
+    const maxCombo = this._candyMatch ? this._candyMatch.totalCombo || 0 : 0;
+    const movesUsed = this._candyMatch ? (this._candyMatch.maxMoves - this._candyMatch.moves) : 0;
+    const movePct = this._candyMatch ? (movesUsed / this._candyMatch.maxMoves) : 1;
+    const grade = (movePct <= 0.3 && maxCombo >= 10) ? 'S'
+               : (movePct <= 0.5 && maxCombo >= 5) ? 'A'
+               : 'B';
+
+    let goldReward, expReward, gradeLabel;
+    if (typeof window !== 'undefined' && window.BalanceAI) {
+      const reward = window.BalanceAI.calcReward(GameState.currentStage, maxCombo, grade);
+      goldReward = reward.gold;
+      expReward = reward.exp;
+      gradeLabel = grade;
+    } else {
+      goldReward = (result && result.score) || 200;
+      expReward = Math.round(goldReward * 0.8);
+      gradeLabel = grade;
+    }
     GameState.addGold(goldReward);
 
     showConfetti();
 
     // 클리어 팝업
+    const heroPos = this._candyMatch ? this._candyMatch.getHeroPos() + 1 : 1;
+    const pathLen = this._candyMatch ? this._candyMatch.getMarblePathLength() : 30;
+    const matchTarget = this._candyMatch ? this._candyMatch._matchTarget : 60;
+
     const overlay = document.createElement('div');
     overlay.className = 'marble-event-overlay';
     overlay.innerHTML = `
       <div class="marble-event-card" style="max-width:340px;">
         <div class="marble-event-emoji">🎉</div>
-        <div class="marble-event-title">스테이지 클리어!</div>
+        <div class="marble-event-title">스테이지 클리어! <span style="color:${grade==='S'?'#FFD700':grade==='A'?'#4488FF':'#aaa'}">${gradeLabel}등급</span></div>
         <div class="marble-event-body">
-          매치 60개 달성! 🍬<br>
-          보상: +${goldReward}G 💰<br>
-          마블 탐험: ${this._marble.playerPos + 1}/30칸 🎯
+          매치 ${matchTarget}개 달성! 🍬<br>
+          최대 콤보: ${maxCombo}x ✨<br>
+          보상: +${goldReward}G 💰 +${expReward}EXP<br>
+          마블 탐험: ${heroPos}/${pathLen}칸 🎯
         </div>
         <button class="btn btn-primary marble-event-btn" id="s1-clear-btn">소환의 방으로 →</button>
       </div>
@@ -211,6 +225,8 @@ export default class Stage1Scene {
 
     overlay.querySelector('#s1-clear-btn').onclick = () => {
       overlay.remove();
+      // 밸런스 기록
+      GameState.recordStageResult(gradeLabel);
       // 스테이지 진행 완료 처리
       GameState.stageProgress.candyCleared = true;
       GameState.stageProgress.marbleCleared = true;
@@ -218,6 +234,12 @@ export default class Stage1Scene {
       SaveManager.save();
       SceneManager.go('summoning');
     };
+  }
+
+  /** 타이머 종료 → 스테이지 자동 클리어 */
+  _onTimerEnd() {
+    if (this._phase === 'clear') return;
+    this._onStageClear({ timerClear: true });
   }
 
   // ── UI 업데이트 ──
@@ -229,18 +251,22 @@ export default class Stage1Scene {
   }
 
   _updateStatusBar() {
-    if (!this._statusBar) return;
-    const progressText = this._candyMatch ? this._candyMatch.getProgressText() : '매치: 0/60';
-    const diceVal = this._lastDiceValue > 0 ? `🎲 ${this._lastDiceValue}` : '🎲 -';
-    const marblePos = `📍 ${this._marble.playerPos + 1}/30`;
-    this._statusBar.textContent = `${progressText} | ${diceVal} | ${marblePos}`;
+    if (!this._statusBar || !this._candyMatch) return;
+    const progressText = this._candyMatch.getProgressText();
+    const diceSum = this._candyMatch.getDiceSum();
+    const diceVal = diceSum > 0 ? `🎲 ${diceSum}` : '🎲 -';
+    const heroPos = this._candyMatch.getHeroPos() + 1;
+    const pathLen = this._candyMatch.getMarblePathLength();
+    this._statusBar.textContent = `${progressText} | ${diceVal} | 📍 ${heroPos}/${pathLen}`;
   }
 
   onLeave() {
     if (this._candyMatch && this._candyMatch.destroy) {
       this._candyMatch.destroy();
     }
-    if (this._dice) this._dice.destroy();
-    if (this._marble) this._marble.destroy();
+    if (this._timerInterval) {
+      clearInterval(this._timerInterval);
+      this._timerInterval = null;
+    }
   }
 }

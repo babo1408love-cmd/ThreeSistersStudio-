@@ -64,24 +64,27 @@ function renderInventory() {
 
     <!-- Inventory Items -->
     <div style="margin-bottom:16px;">
-      <div style="font-weight:700;font-size:0.9em;margin-bottom:6px;">보유 아이템 (${inv.length})</div>
+      <div style="font-weight:700;font-size:0.9em;margin-bottom:6px;">보유 아이템 (${inv.reduce((sum, i) => sum + (i.quantity || 1), 0)})</div>
       <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;" id="inv-items">
         ${inv.length === 0 ? '<div style="color:var(--text-muted);font-size:0.85em;">아이템이 없습니다</div>' : ''}
-        ${inv.map(item => `
-          <div class="inv-item" data-id="${item.id}" style="
+        ${inv.map(item => {
+          const uid = item._uid || item.id;
+          const qty = item.quantity || 1;
+          return `
+          <div class="inv-item" data-uid="${uid}" style="
             display:flex;align-items:center;gap:8px;padding:6px 10px;
             background:var(--bg-card);border:1px solid var(--border-subtle);
             border-radius:var(--radius-sm);cursor:pointer;font-size:0.85em;
             transition:all 0.15s;
           ">
-            <span style="font-size:1.3em;">${item.emoji}</span>
+            <span style="font-size:1.3em;position:relative;">${item.emoji}${qty > 1 ? '<span style="position:absolute;bottom:-2px;right:-6px;font-size:0.55em;background:#333;color:#fff;border-radius:6px;padding:0 3px;min-width:14px;text-align:center;">' + qty + '</span>' : ''}</span>
             <div style="flex:1;">
               <div style="font-weight:700;">${item.name}</div>
               <div style="font-size:0.8em;color:var(--text-secondary);">${formatStats(item.stats)}</div>
             </div>
-            ${item.slot ? '<button class="btn btn-sm btn-secondary equip-btn" data-id="' + item.id + '">장착</button>' : ''}
-          </div>
-        `).join('')}
+            ${item.slot ? '<button class="btn btn-sm btn-secondary equip-btn" data-uid="' + uid + '">장착</button>' : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>
 
@@ -110,8 +113,8 @@ function renderInventory() {
   panel.querySelectorAll('.equip-btn').forEach(btn => {
     btn.onclick = (e) => {
       e.stopPropagation();
-      const id = parseFloat(btn.dataset.id);
-      GameState.equipItem(id);
+      const uid = parseFloat(btn.dataset.uid);
+      GameState.equipItem(uid);
       renderInventory();
     };
   });

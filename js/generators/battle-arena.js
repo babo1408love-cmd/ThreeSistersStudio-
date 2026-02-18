@@ -1,8 +1,9 @@
 // ============================================================
 // 🏟️ 몽글벨 - 배틀아레나 종합 시스템 (battle-arena.js)
 // ============================================================
-// 복사: monglebel/js/generators/battle-arena.js
+// UnitFactory 연동: 보스/적 생성 시 UnitFactory 사용
 // ============================================================
+import UnitFactory from '../data/unit-factory.js';
 
 // ─── 아레나 테마 ───
 export const ARENA_THEMES = {
@@ -528,23 +529,20 @@ export class BattleArena {
     ctx.globalAlpha = 1;
   }
 
-  // 보스 생성
+  // 보스 생성 (UnitFactory 경유)
   spawnBoss(bossType) {
     const def = ARENA_BOSSES[bossType];
     if (!def) return null;
-    return {
-      id: `boss_${Date.now()}`,
-      ...def,
-      currentHp: def.hp,
-      maxHp: def.hp,
-      currentPhase: 0,
+    const boss = UnitFactory.createArenaBoss(def, {
       x: this.width * 0.7,
       y: this.height * 0.4,
-      alive: true,
-    };
+    });
+    boss.id = `boss_${Date.now()}`;
+    boss.currentPhase = 0;
+    return boss;
   }
 
-  // 슬라임 웨이브 생성
+  // 슬라임 웨이브 생성 (UnitFactory 경유)
   spawnSlimeWave(waveNum) {
     const enemies = [];
     const count = 5 + waveNum * 2;
@@ -558,32 +556,25 @@ export class BattleArena {
       else type = waveNum <= 1 ? 'pink' : types[Math.floor(Math.random() * Math.min(types.length, waveNum + 1))];
 
       const def = CUTE_SLIMES[type];
-      enemies.push({
-        id: `slime_${Date.now()}_${i}`,
-        type, ...def,
-        currentHp: Math.floor(def.hp * scale),
-        maxHp: Math.floor(def.hp * scale),
-        atk: Math.floor(def.atk * scale),
-        x: this.width + 50 + Math.random() * 200,
-        y: 100 + Math.random() * (this.height - 200),
-        alive: true,
-        bouncePhase: Math.random() * Math.PI * 2,
-      });
+      const slime = UnitFactory.createArenaEnemy(def, scale);
+      slime.id = `slime_${Date.now()}_${i}`;
+      slime.type = type;
+      slime.x = this.width + 50 + Math.random() * 200;
+      slime.y = 100 + Math.random() * (this.height - 200);
+      slime.bouncePhase = Math.random() * Math.PI * 2;
+      enemies.push(slime);
     }
 
     // 5웨이브마다 보스
     if (waveNum % 5 === 0) {
       const king = CUTE_SLIMES.king;
-      enemies.push({
-        id: `boss_${Date.now()}`,
-        type:'king', ...king,
-        currentHp: Math.floor(king.hp * scale),
-        maxHp: Math.floor(king.hp * scale),
-        x: this.width + 100,
-        y: this.height * 0.4,
-        alive: true,
-        bouncePhase: 0,
-      });
+      const bossSlime = UnitFactory.createArenaEnemy(king, scale);
+      bossSlime.id = `boss_${Date.now()}`;
+      bossSlime.type = 'king';
+      bossSlime.x = this.width + 100;
+      bossSlime.y = this.height * 0.4;
+      bossSlime.bouncePhase = 0;
+      enemies.push(bossSlime);
     }
 
     return { waveNum, enemies, count: enemies.length };

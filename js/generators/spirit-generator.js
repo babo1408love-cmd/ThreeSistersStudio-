@@ -1,7 +1,9 @@
 /**
  * spirit-generator.js — 정령/요정 외모 랜덤 생성기
  * 8속성, 6몸체, 6눈, 9장식, 6날개, Canvas draw, 레어도 1~5
+ * UnitFactory 연동: 스탯은 UnitFactory.createSpirit()으로 생성, 비주얼은 유지
  */
+import UnitFactory from '../data/unit-factory.js';
 
 // ── 8속성 ──
 export const ATTRIBUTES = ['fire','water','earth','wind','light','dark','nature','ice'];
@@ -180,26 +182,31 @@ export function drawFairy(ctx, fairy, x, y, size = 60) {
   ctx.restore();
 }
 
-// ── 정령 랜덤 생성 ──
+// ── 정령 랜덤 생성 (UnitFactory 경유) ──
 export function generateSpirit(opts = {}) {
   const attr = opts.attribute || _pick(ATTRIBUTES);
   const rarity = opts.rarity || _rand(1, 5);
-  const r = RARITY_LEVELS[rarity - 1];
-  const baseStats = { hp: 30, attack: 5, defense: 3, speed: 3, healPower: 2 };
-  for (const k in baseStats) baseStats[k] = Math.round(baseStats[k] * r.multiplier * (0.9 + Math.random() * 0.2));
-  return {
-    id: 'spirit_' + Date.now() + '_' + Math.floor(Math.random() * 9999),
-    name: _pick(NAME_PREFIX[attr]) + _pick(NAME_SUFFIX),
+  const bodyShape = opts.bodyShape || _pick(BODY_SHAPES).id;
+  const eyeStyle = opts.eyeStyle || _pick(EYE_STYLES).id;
+  const decoration = opts.decoration || _pick(DECORATIONS).id;
+  const wingType = opts.wingType || _pick(WING_TYPES).id;
+  const name = _pick(NAME_PREFIX[attr]) + _pick(NAME_SUFFIX);
+
+  // UnitFactory로 밸런스된 스탯 생성
+  const spirit = UnitFactory.createSpirit({
+    name,
     attribute: attr,
     rarity,
     level: 1,
-    bodyShape: opts.bodyShape || _pick(BODY_SHAPES).id,
-    eyeStyle: opts.eyeStyle || _pick(EYE_STYLES).id,
-    decoration: opts.decoration || _pick(DECORATIONS).id,
-    wingType: opts.wingType || _pick(WING_TYPES).id,
-    stats: baseStats,
+    bodyShape,
+    eyeStyle,
+    decoration,
+    wingType,
     emoji: ATTR_INFO[attr].emoji,
-  };
+    with3D: opts.with3D || false,
+  });
+
+  return spirit;
 }
 
 // ── 요정 랜덤 생성 ──

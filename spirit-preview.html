@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🧚 몽글벨 - 정령 & 요정 생성기 미리보기</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a18;color:#fff;font-family:'Noto Sans KR',sans-serif;min-height:100vh;padding:20px}
+.header{text-align:center;margin-bottom:24px}
+.header h1{font-size:1.6em;color:#c084fc;margin-bottom:6px}
+.header p{font-size:0.8em;color:#8e92b8}
+.controls{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:20px}
+.btn{padding:10px 20px;border:none;border-radius:10px;font-size:0.8em;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .15s}
+.btn:hover{transform:scale(1.05)}
+.btn:active{transform:scale(0.95)}
+.btn-generate{background:linear-gradient(135deg,#c084fc,#a855f7);color:#fff;box-shadow:0 4px 15px rgba(192,132,252,.3)}
+.btn-fairy{background:linear-gradient(135deg,#f5c2e7,#ec4899);color:#fff;box-shadow:0 4px 15px rgba(245,194,231,.3)}
+.btn-batch{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0a0a0f;box-shadow:0 4px 15px rgba(251,191,36,.3)}
+.btn-export{background:rgba(30,30,50,.8);border:1px solid #c084fc44;color:#c084fc}
+select{padding:8px 12px;border-radius:8px;background:#1a1a2e;color:#fff;border:1px solid #333;font-family:'Noto Sans KR',sans-serif;font-size:0.8em}
+.preview-area{display:flex;gap:20px;flex-wrap:wrap;justify-content:center}
+.spirit-preview{background:rgba(20,20,40,.8);border:2px solid rgba(100,100,150,.3);border-radius:16px;padding:16px;width:200px;text-align:center;transition:all .3s}
+.spirit-preview:hover{border-color:#c084fc;transform:translateY(-4px);box-shadow:0 8px 25px rgba(192,132,252,.2)}
+.spirit-preview canvas{border-radius:12px;margin-bottom:8px;background:rgba(10,10,25,.5)}
+.spirit-name{font-size:0.9em;font-weight:700;margin-bottom:4px}
+.spirit-info{font-size:0.65em;color:#8e92b8;margin-bottom:4px}
+.spirit-stats{font-size:0.6em;color:#fbbf24}
+.spirit-ability{font-size:0.6em;color:#86efac;margin-top:4px}
+.rarity-1{border-color:#8e92b8}
+.rarity-2{border-color:#55efc4}
+.rarity-3{border-color:#74b9ff}
+.rarity-4{border-color:#a29bfe}
+.rarity-5{border-color:#fbbf24;box-shadow:0 0 15px rgba(251,191,36,.3)}
+.rarity-label{font-size:0.6em;padding:2px 8px;border-radius:4px;display:inline-block;margin-bottom:6px}
+.r1{background:#8e92b830;color:#8e92b8}
+.r2{background:#55efc430;color:#55efc4}
+.r3{background:#74b9ff30;color:#74b9ff}
+.r4{background:#a29bfe30;color:#a29bfe}
+.r5{background:#fbbf2430;color:#fbbf24}
+.json-output{margin-top:20px;background:#1a1a2e;border-radius:12px;padding:16px;font-size:0.65em;color:#86efac;max-height:300px;overflow:auto;display:none;white-space:pre-wrap;word-break:break-all}
+.count-display{text-align:center;margin:12px 0;font-size:0.75em;color:#8e92b8}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🧚 정령 & 요정 생성기</h1>
+  <p>몽글벨 캐릭터를 랜덤 생성하고 미리보기</p>
+</div>
+
+<div class="controls">
+  <select id="elementSelect">
+    <option value="">🎲 랜덤 속성</option>
+    <option value="fire">🔥 불</option>
+    <option value="water">💧 물</option>
+    <option value="earth">🌿 대지</option>
+    <option value="wind">💨 바람</option>
+    <option value="light">✨ 빛</option>
+    <option value="dark">🌙 어둠</option>
+    <option value="nature">🍀 자연</option>
+    <option value="ice">❄️ 얼음</option>
+  </select>
+  <select id="raritySelect">
+    <option value="0">🎲 랜덤 등급</option>
+    <option value="1">⭐ 커먼</option>
+    <option value="2">⭐⭐ 언커먼</option>
+    <option value="3">⭐⭐⭐ 레어</option>
+    <option value="4">⭐⭐⭐⭐ 에픽</option>
+    <option value="5">⭐⭐⭐⭐⭐ 레전더리</option>
+  </select>
+  <button class="btn btn-generate" onclick="addSpirit()">🔮 정령 소환</button>
+  <button class="btn btn-fairy" onclick="addFairy()">🧚 요정 소환</button>
+  <button class="btn btn-batch" onclick="addBatch()">✨ 10마리 소환</button>
+  <button class="btn btn-export" onclick="toggleJSON()">📋 JSON 보기</button>
+  <button class="btn btn-export" onclick="copyCode()">📦 코드 복사</button>
+</div>
+
+<div class="count-display" id="countDisplay">소환된 정령: 0마리</div>
+<div class="preview-area" id="previewArea"></div>
+<div class="json-output" id="jsonOutput"></div>
+
+<script type="module">
+import { generateSpirit, generateFairy, drawSpirit, drawFairy, generateSpiritBatch, spiritsToJSON } from './spirit-generator.js';
+
+const allSpirits = [];
+const RARITY_NAMES = ['', '커먼', '언커먼', '레어', '에픽', '레전더리'];
+const ELEMENT_KR = {fire:'불',water:'물',earth:'대지',wind:'바람',light:'빛',dark:'어둠',nature:'자연',ice:'얼음'};
+
+function getOptions() {
+  const el = document.getElementById('elementSelect').value;
+  const ra = parseInt(document.getElementById('raritySelect').value);
+  const opts = {};
+  if (el) opts.element = el;
+  if (ra > 0) opts.rarity = ra;
+  return opts;
+}
+
+function renderSpirit(spirit) {
+  const div = document.createElement('div');
+  div.className = `spirit-preview rarity-${spirit.rarity}`;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 120;
+  canvas.height = 120;
+  const ctx = canvas.getContext('2d');
+
+  // 애니메이션 루프
+  function animate() {
+    ctx.clearRect(0, 0, 120, 120);
+    if (spirit.type === 'fairy') {
+      drawFairy(ctx, spirit, 60, 60, 1);
+    } else {
+      drawSpirit(ctx, spirit, 60, 60, 1);
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  const typeLabel = spirit.type === 'fairy' ? '🧚 요정' : '🔮 정령';
+
+  div.innerHTML = '';
+  div.appendChild(canvas);
+
+  const info = document.createElement('div');
+  info.innerHTML = `
+    <span class="rarity-label r${spirit.rarity}">${RARITY_NAMES[spirit.rarity]}</span>
+    <div class="spirit-name" style="color:${spirit.appearance.palette.primary}">${spirit.name}</div>
+    <div class="spirit-info">${typeLabel} | ${ELEMENT_KR[spirit.element]} ${spirit.appearance.bodyShape !== 'humanoid' ? spirit.appearance.bodyShape : ''}</div>
+    <div class="spirit-stats">HP:${spirit.stats.hp} ATK:${spirit.stats.atk} DEF:${spirit.stats.def} SPD:${spirit.stats.spd}</div>
+    <div class="spirit-ability">🌟 ${spirit.ability.name}</div>
+  `;
+  div.appendChild(info);
+
+  document.getElementById('previewArea').prepend(div);
+}
+
+function updateCount() {
+  document.getElementById('countDisplay').textContent = `소환된 정령: ${allSpirits.length}마리`;
+}
+
+window.addSpirit = function() {
+  const spirit = generateSpirit(getOptions());
+  allSpirits.push(spirit);
+  renderSpirit(spirit);
+  updateCount();
+};
+
+window.addFairy = function() {
+  const fairy = generateFairy(getOptions());
+  allSpirits.push(fairy);
+  renderSpirit(fairy);
+  updateCount();
+};
+
+window.addBatch = function() {
+  const batch = generateSpiritBatch(10, getOptions());
+  batch.forEach(s => {
+    allSpirits.push(s);
+    renderSpirit(s);
+  });
+  updateCount();
+};
+
+window.toggleJSON = function() {
+  const el = document.getElementById('jsonOutput');
+  if (el.style.display === 'none' || !el.style.display) {
+    el.style.display = 'block';
+    el.textContent = spiritsToJSON(allSpirits);
+  } else {
+    el.style.display = 'none';
+  }
+};
+
+window.copyCode = function() {
+  const code = `// 몽글벨 정령 데이터 - ${new Date().toLocaleString('ko-KR')}\nconst GENERATED_SPIRITS = ${spiritsToJSON(allSpirits)};`;
+  navigator.clipboard.writeText(code).then(() => {
+    alert('📋 코드가 클립보드에 복사되었습니다!');
+  }).catch(() => {
+    const el = document.getElementById('jsonOutput');
+    el.style.display = 'block';
+    el.textContent = code;
+    alert('아래 텍스트를 수동으로 복사해주세요');
+  });
+};
+</script>
+</body>
+</html>

@@ -11,19 +11,20 @@ import SPIRITS, { RARITY_COLORS, RARITY_NAMES, RARITY_BG, rollSpiritItemRarity, 
 import { showComboText, showScoreFloat, showConfetti, showToast } from '../ui/toast.js';
 import { BOARD_SLOT_LAYOUT, EQUIP_SLOT_MAP, INVENTORY_CONFIG, HERO_SLOT_CONFIG, PET_SLOT_CONFIG, canEquipHero, isSlotUnlocked, isPetSlotUnlocked } from '../data/inventory-config.js';
 import { RAGE_GAUGE, ATTRIBUTES } from '../data/hero-config.js';
-import { rollMarbleDrop as rollMarbleDropNew, placeMimicsOnPath, checkMimicNearby, isRareDrop, DROP_ANIMATION } from '../data/marble-drops-config.js';
+import { rollMarbleDrop as rollMarbleDropNew, rollMarbleDropScaled, placeMimicsOnPath, checkMimicNearby, isRareDrop, DROP_ANIMATION } from '../data/marble-drops-config.js';
 import { GOLDEN_MIMIC, generateMimicReward } from '../data/golden-mimic-config.js';
 import { createSpiritPartItem } from '../data/spirit-parts-config.js';
 import { showMimicTutorialOnBoard, hasMimicTutorialSeen } from '../ui/mimic-tutorial.js';
 import { MATCH_TIERS, MATCH_SPIRIT_DROP, SPECIAL_TILE_SYSTEM, getMatchTier, rollSpiritRarityByTier } from '../data/match-tiers-config.js';
 import { MOTHER_OF_WORLD, isHelperActive, biasedGemIndex, getTileTarget } from '../data/beginner-helper-config.js';
+import { getComboBonus, rollDicePair } from '../data/balance-config.js';
 
-const GEMS = ['🧚', '🍄', '💎', '⭐', '🌈', '🍬'];
+const ALL_GEMS = ['🧚', '🍄', '💎', '⭐', '🌈', '🍬', '🔥', '💧'];
 const HERO_EMOJI = '🧚';
 
-// Marble drop: uses marble-drops-config.js (세계관 전체 아이템 랜덤)
+// Marble drop: uses marble-drops-config.js (스테이지별 스케일링)
 function rollMarbleDrop() {
-  return rollMarbleDropNew();
+  return rollMarbleDropScaled(GameState.currentStage);
 }
 
 export default class CandyMatch {
@@ -73,11 +74,15 @@ export default class CandyMatch {
     this._dragTimerId = null;
     this._dragTimeLeft = 0;
 
-    // 매치 카운트 기반 클리어 (60매치)
+    // 매치 카운트 기반 클리어
     this._matchCount = 0;
-    this._matchTarget = 60;
+    this._matchTarget = options.matchTarget || 60;
     this._fragmentSets = 0;       // 완성된 조각 세트 수 (매치 6개당 1세트)
     this._fragmentProgress = 0;   // 현재 조각 진행 (0~5)
+
+    // 젬 종류 (밸런스: 스테이지별 6~8종)
+    this._gemCount = options.gemCount || 6;
+    this._gems = ALL_GEMS.slice(0, this._gemCount);
 
     // 초보자 도우미 상태
     this._helperActive = isHelperActive(GameState);
@@ -89,8 +94,8 @@ export default class CandyMatch {
       this._tileTarget = getTileTarget(GameState.currentStage);
     }
 
-    // 컴팩트 모드 (통합 스테이지1: 큰 타일, 마블/장비 분리)
-    this._compactMode = !this._introPhase;
+    // 컴팩트 모드: 명시적 옵션 또는 인트로 여부로 결정
+    this._compactMode = options.compactMode !== undefined ? options.compactMode : !this._introPhase;
 
     // 외부 잠금 (주사위/마블 진행 중 드래그 비활성화)
     this._externalLock = false;
@@ -110,8 +115,8 @@ export default class CandyMatch {
       this.board[r] = [];
       for (let c = 0; c < this.cols; c++) {
         this.board[r][c] = this._helperActive
-          ? biasedGemIndex(GEMS.length)
-          : Math.floor(Math.random() * GEMS.length);
+          ? biasedGemIndex(this._gems.length)
+          : Math.floor(Math.random() * this._gems.length);
       }
     }
 
@@ -463,7 +468,7 @@ export default class CandyMatch {
               cell.className = 'candy-cell';
               cell.style.opacity = '0.3';
               cell.style.pointerEvents = 'none';
-              cell.textContent = GEMS[this.board[cr][cc]] || '';
+              cell.textContent = this._gems[this.board[cr][cc]] || '';
             }
           } else {
             cell.className = 'candy-cell';
@@ -856,14 +861,14 @@ export default class CandyMatch {
           if (c < this.cols - 2) {
             const a = this.board[r][c], b = this.board[r][c + 1], d = this.board[r][c + 2];
             if (a >= 0 && b >= 0 && d >= 0 && a === b && b === d) {
-              this.board[r][c] = (a + 1 + Math.floor(Math.random() * (GEMS.length - 1))) % GEMS.length;
+              this.board[r][c] = (a + 1 + Math.floor(Math.random() * (this._gems.length - 1))) % this._gems.length;
               changed = true;
             }
           }
           if (r < this.rows - 2) {
             const a = this.board[r][c], b = this.board[r + 1][c], d = this.board[r + 2][c];
             if (a >= 0 && b >= 0 && d >= 0 && a === b && b === d) {
-              this.board[r][c] = (a + 1 + Math.floor(Math.random() * (GEMS.length - 1))) % GEMS.length;
+              this.board[r][c] = (a + 1 + Math.floor(Math.random() * (this._gems.length - 1))) % this._gems.length;
               changed = true;
             }
           }
@@ -879,9 +884,7 @@ export default class CandyMatch {
     if (this._introPhase) { this._renderIntro(); return; }
 
     const cleared = this._checkCleared();
-    const progress = this._helperActive
-      ? Math.min(100, this._tilesDestroyed / this._tileTarget * 100)
-      : Math.min(100, this._matchCount / this._matchTarget * 100);
+    const progress = Math.min(100, this._matchCount / this._matchTarget * 100);
     const compact = this._compactMode;
     const totalCols = compact ? this.cols : this.cols + 2;
     const totalRows = compact ? this.rows : this.rows + 2;
@@ -901,9 +904,7 @@ export default class CandyMatch {
       i < this._fragmentProgress ? '▶️' : '⬛'
     ).join('');
 
-    const goalText = this._helperActive
-      ? `💥 타일 파괴: ${this._tilesDestroyed}/${this._tileTarget}`
-      : `🔗 매치: ${this._matchCount}/${this._matchTarget}`;
+    const goalText = `🔗 매치: ${this._matchCount}/${this._matchTarget}`;
 
     const helperBarHtml = this._helperActive ? `
         <div class="helper-bar" id="helper-bar">
@@ -997,7 +998,7 @@ export default class CandyMatch {
             cell.textContent = info ? info.emoji : '💫';
           } else {
             cell.className = 'candy-cell candy-cell-lg';
-            cell.textContent = GEMS[this.board[r][c]];
+            cell.textContent = this._gems[this.board[r][c]];
           }
           cell.dataset.r = r;
           cell.dataset.c = c;
@@ -1068,7 +1069,7 @@ export default class CandyMatch {
                 cell.textContent = info ? info.emoji : '💫';
               } else {
                 cell.className = 'candy-cell';
-                cell.textContent = GEMS[this.board[cr][cc]];
+                cell.textContent = this._gems[this.board[cr][cc]];
               }
               cell.dataset.r = cr;
               cell.dataset.c = cc;
@@ -1124,8 +1125,8 @@ export default class CandyMatch {
           for (let c = 0; c < this.cols; c++) {
             if (this.board[r][c] >= 0) {
               this.board[r][c] = this._helperActive
-                ? biasedGemIndex(GEMS.length)
-                : Math.floor(Math.random() * GEMS.length);
+                ? biasedGemIndex(this._gems.length)
+                : Math.floor(Math.random() * this._gems.length);
             }
           }
         }
@@ -1158,7 +1159,7 @@ export default class CandyMatch {
       const info = this._getSpecialTileInfo(this.board[r][c]);
       el.textContent = info ? info.emoji : '💫';
     } else {
-      el.textContent = GEMS[this.board[r][c]];
+      el.textContent = this._gems[this.board[r][c]];
     }
 
     el.classList.remove('dragging', 'trail', 'pad-empty');
@@ -1189,7 +1190,7 @@ export default class CandyMatch {
           el.textContent = info ? info.emoji : '💫';
           el.className = 'candy-cell special-tile';
         } else {
-          el.textContent = GEMS[this.board[r][c]];
+          el.textContent = this._gems[this.board[r][c]];
           el.className = 'candy-cell';
         }
         el.style.opacity = '';
@@ -1251,8 +1252,8 @@ export default class CandyMatch {
     if (!this._dragging) { return; }
 
     if (this._floatingOrb) {
-      this._floatingOrb.style.left = (e.clientX - 22) + 'px';
-      this._floatingOrb.style.top = (e.clientY - 22) + 'px';
+      this._floatingOrb.style.left = (e.clientX - 11) + 'px';
+      this._floatingOrb.style.top = (e.clientY - 11) + 'px';
     }
 
     const wrapper = this.container.querySelector('#candy-board-wrapper');
@@ -1285,6 +1286,9 @@ export default class CandyMatch {
 
         this._updateCellVisual(cr, cc);  // old pos: shows swapped gem
         this._updateCellVisual(nr, nc);  // new pos: shows empty (gem on cursor)
+
+        // 타일 이동 효과음
+        if (typeof SoundSFX !== 'undefined' && SoundSFX.tileMove) SoundSFX.tileMove();
       }
     }
   }
@@ -1358,10 +1362,10 @@ export default class CandyMatch {
       orb.textContent = info ? info.emoji : '💫';
       orb.classList.add('special-orb');
     } else {
-      orb.textContent = GEMS[gemIdx];
+      orb.textContent = this._gems[gemIdx];
     }
-    orb.style.left = (x - 22) + 'px';
-    orb.style.top = (y - 22) + 'px';
+    orb.style.left = (x - 11) + 'px';
+    orb.style.top = (y - 11) + 'px';
     document.body.appendChild(orb);
     this._floatingOrb = orb;
   }
@@ -1507,8 +1511,8 @@ export default class CandyMatch {
           }
         } else {
           this.board[r][c] = this._helperActive
-            ? biasedGemIndex(GEMS.length)
-            : Math.floor(Math.random() * GEMS.length);
+            ? biasedGemIndex(this._gems.length)
+            : Math.floor(Math.random() * this._gems.length);
           newCells.push(r + ',' + c);
         }
         ri++;
@@ -1543,6 +1547,7 @@ export default class CandyMatch {
 
       // ★ 클리어 달성 시 즉시 루프 종료 (강제 클리어)
       if (this._checkCleared()) {
+        if (typeof SoundSFX !== 'undefined' && SoundSFX.candyClear) SoundSFX.candyClear();
         this.comboCount = 0;
         return;
       }
@@ -1552,7 +1557,21 @@ export default class CandyMatch {
         if (this._fragmentProgress >= 6) {
           this._fragmentProgress = 0;
           this._fragmentSets++;
-          showToast(`✨ 정령 조각 완성! (보유: ${this._fragmentSets}세트)`);
+
+          // ★ 조각 세트 완성 시 정령 파츠 아이템 실제 생성
+          if (typeof SoundSFX !== 'undefined' && SoundSFX.spiritSetComplete) SoundSFX.spiritSetComplete();
+          const fragRarity = rollSpiritItemRarity();
+          const fragSpirits = getSpiritsByRarity(fragRarity);
+          if (fragSpirits && fragSpirits.length > 0) {
+            const fragSpirit = fragSpirits[Math.floor(Math.random() * fragSpirits.length)];
+            if (fragSpirit) {
+              const fragItem = createSpiritPartItem(fragSpirit.key, fragSpirit.name, fragSpirit.emoji, fragRarity);
+              GameState.addSpiritItem(fragItem);
+              showToast(`✨ 정령 조각 완성! [${fragSpirit.emoji} ${fragItem.name}] (${this._fragmentSets}세트)`);
+            }
+          } else {
+            showToast(`✨ 정령 조각 완성! (${this._fragmentSets}세트)`);
+          }
         }
       }
       this.totalCombo = Math.max(this.totalCombo, this.comboCount);
@@ -1595,8 +1614,19 @@ export default class CandyMatch {
       }
 
       const comboBonus = this.comboCount > 1 ? this.comboCount * 15 : 0;
-      const totalPoints = basePoints + bonusPoints + comboBonus;
+
+      // 콤보 보너스 시스템 (balance-config)
+      const comboBonusInfo = getComboBonus(this.comboCount);
+      const comboMultiplier = comboBonusInfo ? comboBonusInfo.multiplier : 1.0;
+
+      const totalPoints = Math.round((basePoints + bonusPoints + comboBonus) * comboMultiplier);
       this.score += totalPoints;
+
+      // 콤보 보너스 특수 효과
+      if (comboBonusInfo && comboBonusInfo.bonus === 'dice_bonus') {
+        GameState.addSpecialDice('bonus');
+        showToast('⭐ 5콤보! 보너스 주사위 획득!');
+      }
 
       // --- Rage Gauge fill ---
       this._addRageFromMatch(matchedKeys, this.comboCount);
@@ -1605,7 +1635,16 @@ export default class CandyMatch {
       const matchedSet = new Set(matchedKeys);
       this._updateBoardDOM({ exploding: matchedSet });
       showScoreFloat(totalPoints);
-      if (this.comboCount >= 2) showComboText('✨ ' + this.comboCount + 'x 콤보!');
+      // 매치/콤보 효과음
+      if (typeof SoundSFX !== 'undefined') {
+        if (this.comboCount >= 3 && SoundSFX.candyCombo) SoundSFX.candyCombo(this.comboCount);
+        else if (SoundSFX.candyMatch) SoundSFX.candyMatch(this.comboCount);
+      }
+      if (comboBonusInfo && this.comboCount >= 3) {
+        showComboText(`${comboBonusInfo.label}`);
+      } else if (this.comboCount >= 2) {
+        showComboText('✨ ' + this.comboCount + 'x 콤보!');
+      }
       if (bonusText) showComboText('💥 ' + bonusText);
 
       // --- 매치 단계 연출 (tier 2+) ---
@@ -1652,9 +1691,10 @@ export default class CandyMatch {
         if (this._destroyed) return;
       }
 
-      // --- Phase 1.5b: Create special tile for tier 2+ ---
+      // --- Phase 1.5b: ★ 보너스 타일 자동폭파 ★ (생성 즉시 낙하+폭발) ---
       if (bestTier && bestTier.ability && bestTier.ability.createSpecialTile && bestGroup) {
-        this._placeSpecialTile(bestTier, bestGroup, matchedSet);
+        await this._autoDetonateSpecialTile(bestTier, bestGroup, matchedSet);
+        if (this._destroyed) return;
       }
 
       // --- Phase 1.5c: Tier 8 purify (no special tile, immediate board clear) ---
@@ -2073,6 +2113,168 @@ export default class CandyMatch {
     matchedSet.delete(pr + ',' + pc);
   }
 
+  // ★ 보너스 타일 자동폭파: 생성 즉시 낙하 → 착지 → 폭발 (보드에 남지 않음)
+  async _autoDetonateSpecialTile(tier, group, matchedSet) {
+    if (!group || !group.cells || group.cells.length === 0) return;
+
+    // 1) 타일 타입 결정 (기존 _placeSpecialTile 로직 재사용)
+    const typeMap = { area_bomb: 2, lightning: 3, rainbow: 4, cross_bomb: 5, mega_bomb: 6 };
+    let typeIdx;
+    if (tier.ability.specialTileType === 'line_bomb') {
+      typeIdx = group.type === 'h' ? 0 : 1;
+    } else {
+      typeIdx = typeMap[tier.ability.specialTileType] ?? 2;
+    }
+
+    // 2) 시작 위치 — 매치 그룹 중앙
+    const mid = Math.floor(group.cells.length / 2);
+    const [startR, startC] = group.cells[mid];
+
+    // 3) 착지 위치 계산 — 아래로 스캔
+    let landR = startR;
+    for (let r = startR + 1; r < this.rows; r++) {
+      const key = r + ',' + startC;
+      // matchedSet에 포함된 셀(곧 제거될 셀)은 통과
+      if (matchedSet.has(key)) continue;
+      // 특수 슬롯(chest/dice/equip/hero/pet)에 닿으면 정지
+      if (this._isSpecial(r, startC)) { landR = r - 1; break; }
+      // 일반 타일 or 기존 특수 타일에 닿으면 그 위에 정지
+      if (this.board[r][startC] >= 0) { landR = r - 1; break; }
+      landR = r;
+    }
+    // 시작과 같으면 그 자리에서 폭발
+    if (landR < startR) landR = startR;
+
+    // 4) 이모지/색상 결정
+    const emoji = tier.ability.specialTileEmoji || tier.emoji;
+    const color = tier.color || 'rgba(251,191,36,0.8)';
+
+    // 5) 낙하 애니메이션
+    await this._showBonusTileFall(startR, startC, landR, startC, emoji, color);
+    if (this._destroyed) return;
+
+    // 6) 폭발 효과 — 임시로 board에 encoded 값 세팅 → trigger → 원복
+    const encoded = this._encodeSpecialTile(group.gem, typeIdx);
+    const origVal = this.board[landR][startC];
+    this.board[landR][startC] = encoded;
+
+    const extraCells = this._triggerSpecialTile(landR, startC);
+
+    // 원래 값 복구 (보드에 타일을 남기지 않음)
+    this.board[landR][startC] = origVal;
+
+    // 7) 폭발 범위 내 기존 특수 타일 연쇄 트리거
+    const chainTriggered = new Set();
+    const toChain = [...extraCells];
+    const chainDone = new Set();
+    while (toChain.length > 0) {
+      const ek = toChain.shift();
+      if (chainDone.has(ek)) continue;
+      const [er, ec] = ek.split(',').map(Number);
+      if (this._isSpecialTile(er, ec)) {
+        chainDone.add(ek);
+        const chainExtra = this._triggerSpecialTile(er, ec);
+        for (const ce of chainExtra) {
+          chainTriggered.add(ce);
+          if (!chainDone.has(ce)) toChain.push(ce);
+        }
+      }
+    }
+
+    // 연쇄로 추가된 셀 합치기
+    for (const ce of chainTriggered) extraCells.add(ce);
+
+    // 8) 추가 제거 셀을 matchedSet에 추가 + 연출
+    if (extraCells.size > 0) {
+      for (const ek of extraCells) matchedSet.add(ek);
+      this._updateBoardDOM({ exploding: extraCells });
+      this.score += extraCells.size * 20;
+      if (typeof showScoreFloat === 'function') showScoreFloat(extraCells.size * 20);
+      // 효과음
+      if (typeof SoundSFX !== 'undefined' && SoundSFX.candyMatch) SoundSFX.candyMatch();
+      await this._wait(389);
+    }
+  }
+
+  // 보너스 타일 낙하 애니메이션 (시작 셀 → 착지 셀)
+  async _showBonusTileFall(startR, startC, landR, landC, emoji, color) {
+    const wrapper = this.container.querySelector('#candy-board-wrapper');
+    if (!wrapper) return;
+
+    const startIdx = this._getCellIndex(startR, startC);
+    const landIdx = this._getCellIndex(landR, landC);
+    const startEl = wrapper.children[startIdx];
+    const landEl = wrapper.children[landIdx];
+    if (!startEl || !landEl) return;
+
+    const startRect = startEl.getBoundingClientRect();
+    const landRect = landEl.getBoundingClientRect();
+
+    // 낙하 거리 (px)
+    const fallDist = landRect.top - startRect.top;
+    // 최소 200ms, px당 0.8ms, 최대 400ms
+    const fallDuration = Math.max(200, Math.min(400, Math.abs(fallDist) * 0.8));
+
+    // 낙하 엘리먼트 생성
+    const el = document.createElement('div');
+    el.className = 'bonus-tile-falling';
+    el.textContent = emoji;
+    el.style.cssText = `
+      left: ${startRect.left + startRect.width / 2 - 18}px;
+      top: ${startRect.top + startRect.height / 2 - 18}px;
+      --glow-color: ${color};
+    `;
+    document.body.appendChild(el);
+
+    // spawn 애니메이션 대기 (200ms)
+    await this._wait(200);
+    if (this._destroyed) { el.remove(); return; }
+
+    // 낙하 시작 — CSS transition
+    el.style.transition = `top ${fallDuration}ms cubic-bezier(0.55, 0, 1, 0.45)`;
+    el.style.top = `${landRect.top + landRect.height / 2 - 18}px`;
+
+    await this._wait(fallDuration);
+    if (this._destroyed) { el.remove(); return; }
+
+    // 착지 임팩트 애니메이션
+    el.style.transition = 'none';
+    el.style.animation = 'bonusTileImpact 0.35s ease-out forwards';
+
+    // 임팩트 링
+    const ring = document.createElement('div');
+    ring.className = 'bonus-impact-ring';
+    ring.style.cssText = `
+      left: ${landRect.left + landRect.width / 2}px;
+      top: ${landRect.top + landRect.height / 2}px;
+      --ring-color: ${color};
+    `;
+    document.body.appendChild(ring);
+
+    // 파편 파티클 (6개)
+    const fragEmojis = ['✨', '⭐', '💥', '🔥', '✨', '⭐'];
+    for (let i = 0; i < 6; i++) {
+      const frag = document.createElement('div');
+      frag.className = 'bonus-impact-fragment';
+      const angle = (i / 6) * Math.PI * 2;
+      const dist = 40 + Math.random() * 30;
+      frag.style.cssText = `
+        left: ${landRect.left + landRect.width / 2}px;
+        top: ${landRect.top + landRect.height / 2}px;
+        --tx: ${Math.cos(angle) * dist}px;
+        --ty: ${Math.sin(angle) * dist}px;
+      `;
+      frag.textContent = fragEmojis[i];
+      document.body.appendChild(frag);
+      setTimeout(() => frag.remove(), 600);
+    }
+
+    // 정리
+    await this._wait(350);
+    el.remove();
+    setTimeout(() => ring.remove(), 500);
+  }
+
   // Trigger a special tile's effect, returns set of extra cell keys to clear
   _triggerSpecialTile(r, c) {
     const val = this.board[r][c];
@@ -2301,6 +2503,7 @@ export default class CandyMatch {
     }
 
     if (items.length === 0) return;
+    if (typeof SoundSFX !== 'undefined' && SoundSFX.spiritFragmentDrop) SoundSFX.spiritFragmentDrop();
 
     // 드랍 연출: 매치 위치에서 떠오른 후 인벤토리로 이동
     for (let i = 0; i < items.length; i++) {
@@ -2398,6 +2601,7 @@ export default class CandyMatch {
     document.body.appendChild(heroFly);
 
     showComboText('💢 정화의 빛!');
+    if (typeof SoundSFX !== 'undefined' && SoundSFX.rageActivation) SoundSFX.rageActivation();
 
     // ── 3. 주인공 → 화면 중앙으로 비행 ──
     requestAnimationFrame(() => {
@@ -2476,8 +2680,8 @@ export default class CandyMatch {
     setTimeout(() => {
       heroFly.classList.remove('rage-hero-impact');
       heroFly.classList.add('rage-fly-return');
-      heroFly.style.left = (diceRect.left + diceRect.width / 2) + 'px';
-      heroFly.style.top = (diceRect.top + diceRect.height / 2) + 'px';
+      heroFly.style.left = (startRect.left + startRect.width / 2) + 'px';
+      heroFly.style.top = (startRect.top + startRect.height / 2) + 'px';
     }, FLY_DUR + IMPACT_DELAY + IMPACT_DUR);
 
     // 5e. 슬롯 영웅들 귀환
@@ -2559,8 +2763,8 @@ export default class CandyMatch {
           cellEl.classList.add('rage-tile-explode');
         }
         this.board[r][c] = this._helperActive
-          ? biasedGemIndex(GEMS.length)
-          : Math.floor(Math.random() * GEMS.length); // 새 타일로 교체
+          ? biasedGemIndex(this._gems.length)
+          : Math.floor(Math.random() * this._gems.length); // 새 타일로 교체
         clearedCount++;
         this.score += 10; // 타일당 보너스 점수
       }, delay);
@@ -2592,19 +2796,94 @@ export default class CandyMatch {
     return this._matchCount;
   }
 
-  /** 진행 상황 텍스트 (도우미 활성 시 타일 파괴 수 표시) */
-  getProgressText() {
-    if (this._helperActive) {
-      return `타일: ${this._tilesDestroyed}/${this._tileTarget}`;
+  /** 주사위 합 조회 */
+  getDiceSum() {
+    return this._dice[0] + this._dice[1];
+  }
+
+  /** 영웅 마블 위치 조회 */
+  getHeroPos() {
+    return this._heroPos;
+  }
+
+  /** 마블 경로 길이 조회 */
+  getMarblePathLength() {
+    return this._marblePath.length;
+  }
+
+  /**
+   * 외부 주사위 굴림 + 영웅 이동 (통합 스테이지1용)
+   * @param {number} bonus - 콤보 보너스 (0 또는 1)
+   * @param {function} callback - 이동 완료 시 호출
+   */
+  externalDiceRoll(bonus, callback, type1 = 'normal', type2 = 'normal') {
+    const result = rollDicePair(type1, type2);
+    const d1 = result.d1 + bonus;
+    const d2 = result.d2;
+    this._dice = [d1, d2];
+    this._diceSum = d1 + d2;
+    this._diceRolled = true;
+    this._diceSpecials = result.specials; // 특수 효과 저장
+    this._render();
+
+    // 🔊 주사위 효과음
+    if (typeof SoundSFX !== 'undefined') SoundSFX.diceRoll();
+
+    // 주사위 결과 표시 후 영웅 이동
+    setTimeout(() => {
+      this._heroMoving = true;
+      this._externalMoveStep(this._diceSum, callback);
+    }, 800);
+  }
+
+  /** 외부 영웅 이동 스텝 (재귀) */
+  _externalMoveStep(remaining, callback) {
+    if (this._destroyed || remaining <= 0) {
+      // 🔊 착지음
+      if (typeof SoundSFX !== 'undefined') SoundSFX.marbleLand();
+      // 착지: 아이템 수집
+      const landTile = this._marblePath[this._heroPos];
+      if (landTile && !landTile.collected && landTile.drop.type !== 'empty') {
+        landTile.collected = true;
+        this._collectDrop(landTile.drop);
+        this._collectedItems.push(landTile.drop);
+        if (landTile.drop.type !== 'golden_mimic') showConfetti();
+        // 🔊 아이템 수집음
+        if (typeof SoundSFX !== 'undefined') SoundSFX.marbleCollect();
+      }
+      this._heroMoving = false;
+      this._diceSum = 0;
+      this._render();
+      if (callback) callback();
+      return;
     }
+
+    // 🔊 매 칸 이동 "톡" 소리
+    if (typeof SoundSFX !== 'undefined') SoundSFX.marbleStep();
+
+    this._heroPos = (this._heroPos + 1) % this._marblePath.length;
+
+    // 지나가는 중 미믹 자동 수집
+    const passTile = this._marblePath[this._heroPos];
+    if (passTile && passTile.isMimic && !passTile.collected) {
+      passTile.collected = true;
+      this._collectDrop(passTile.drop);
+      this._collectedItems.push(passTile.drop);
+    }
+
+    remaining--;
+    this._diceSum = remaining;
+    this._render();
+    setTimeout(() => this._externalMoveStep(remaining, callback), 250);
+  }
+
+  /** 진행 상황 텍스트 — 항상 매치 카운트 표시 */
+  getProgressText() {
     return `매치: ${this._matchCount}/${this._matchTarget}`;
   }
 
-  /** 내부 클리어 판정 (도우미 활성 시: 타일 파괴 수 기준) */
+  /** 내부 클리어 판정 — 항상 매치 카운트 기준 */
   _checkCleared() {
-    if (this._helperActive) {
-      return this._tilesDestroyed >= this._tileTarget;
-    }
     return this._matchCount >= this._matchTarget;
   }
 

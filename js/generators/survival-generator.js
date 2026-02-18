@@ -3,6 +3,7 @@
  *
  * 원본: survival-pursuer-v1.html (독립형 게임)
  * 변환: ES6 모듈 클래스 (monglebel 통합용)
+ * UnitFactory 연동: 플레이어/적 생성 시 UnitFactory 사용
  *
  * 컨셉: 보스를 쫓아가는 추격전
  *   - 거리 게이지(0~100): 0에 가까울수록 보스 제압, 100이면 탈출
@@ -10,6 +11,7 @@
  *   - 보스 AI: ESCAPE → ABSORB(엘리트 흡수) → PANIC(근접 시)
  *   - 자동공격 + 터치/마우스 좌우 이동
  */
+import UnitFactory from '../data/unit-factory.js';
 
 // ── 설정 ──
 export const SURVIVAL_CONFIG = {
@@ -136,18 +138,9 @@ export class SurvivalPursuer {
     this._lastTime = 0;
     this._animFrame = null;
 
-    // ── Player ──
+    // ── Player (UnitFactory 경유) ──
     const cfg = SURVIVAL_CONFIG.player;
-    this.player = {
-      x: 0,
-      y: this.H * cfg.baseYRatio,
-      targetX: 0,
-      velocityX: 0,
-      hp: cfg.hp,
-      hpMax: cfg.hp,
-      lastFireTime: 0,
-      emoji: '🧚',
-    };
+    this.player = UnitFactory.createSurvivalPlayer(cfg, this.W, this.H);
 
     // ── Boss ──
     const bCfg = SURVIVAL_CONFIG.boss;
@@ -521,16 +514,10 @@ export class SurvivalPursuer {
 
   _spawnEnemy(isElite) {
     const eCfg = SURVIVAL_CONFIG.enemy;
-    const x = (Math.random() - 0.5) * (this.W * 0.8);
-    const y = -eCfg.size * (isElite ? 1.5 : 1);
-
-    const hp = isElite ? eCfg.baseHp * eCfg.eliteHpMultiplier : eCfg.baseHp;
-    const speed = isElite ? eCfg.eliteSpeed : eCfg.baseSpeed + Math.random() * eCfg.speedVariance;
-
-    this.enemies.push({
-      x, y, hp, hpMax: hp, speed, isElite, dead: false,
-      emoji: isElite ? '👾' : '🩷',
-    });
+    const enemy = UnitFactory.createSurvivalEnemy(eCfg, isElite, this.W);
+    enemy.hpMax = enemy.maxHp || enemy.hp;
+    enemy.dead = false;
+    this.enemies.push(enemy);
   }
 
   // ── Enemies ──

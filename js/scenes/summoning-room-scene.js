@@ -37,7 +37,8 @@ export default class SummoningRoomScene {
     // 조각 수 계산
     const normalFragments = spiritItems.filter(item => item.rarity !== 'legendary');
     const legendFragments = countLegendFragments(spiritItems);
-    const canSummon = normalFragments.length >= 6;
+    const spiritsFull = spirits.length >= (GameState.MAX_SPIRITS || 10);
+    const canSummon = normalFragments.length >= 6 && !spiritsFull;
 
     // 펫 진화 가능 여부
     const canEvolvePet = legendFragments >= 6;
@@ -63,7 +64,7 @@ export default class SummoningRoomScene {
       <!-- 소환된 정령 -->
       <div style="margin:16px 0 8px;">
         <div style="color:var(--text-secondary);font-size:0.85em;margin-bottom:8px;">
-          소환된 정령 (${spirits.length}마리)${GameState.petSlot ? ` | 펫: ${GameState.petSlot.emoji} ${GameState.petSlot.name}` : ''}
+          소환된 정령 (${spirits.length}/${GameState.MAX_SPIRITS || 10}마리)${GameState.petSlot ? ` | 펫: ${GameState.petSlot.emoji} ${GameState.petSlot.name}` : ''}
         </div>
         <div class="spirit-slots" id="spirit-slots" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
           ${spirits.length === 0 ? '<div style="color:var(--text-muted);font-size:0.85em;">아직 소환된 정령이 없습니다</div>' : ''}
@@ -111,6 +112,7 @@ export default class SummoningRoomScene {
       i < (normalCount % 6 || (normalCount >= 6 ? 6 : 0)) ? '▶️' : '⬛'
     ).join('');
     const setsAvailable = Math.floor(normalCount / 6);
+    const spiritsFull = GameState.spirits.length >= (GameState.MAX_SPIRITS || 10);
 
     el.innerHTML = `
       <div class="summoning-tree" id="summon-tree" style="font-size:60px;margin:8px 0;">🌳</div>
@@ -119,10 +121,21 @@ export default class SummoningRoomScene {
         조각 6개를 모으면 정령을 소환할 수 있어요!
       </div>
 
+      ${spiritsFull ? `
+        <div style="margin-bottom:12px;padding:10px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.4);border-radius:8px;">
+          <div style="font-size:0.95em;color:#ff6b6b;font-weight:700;text-align:center;">
+            더이상 소환할수 없습니다
+          </div>
+          <div style="font-size:0.8em;color:var(--text-secondary);text-align:center;margin-top:4px;">
+            정령 보유 한도 ${GameState.MAX_SPIRITS || 10}마리에 도달했습니다
+          </div>
+        </div>
+      ` : ''}
+
       <div style="margin-bottom:12px;">
         <div style="font-size:0.85em;margin-bottom:4px;">
           일반 조각: <b style="color:var(--green);">${normalCount}</b>개
-          ${normalCount >= 6 ? `(${setsAvailable}회 소환 가능!)` : `(${6 - normalCount % 6}개 더 필요)`}
+          ${normalCount >= 6 && !spiritsFull ? `(${setsAvailable}회 소환 가능!)` : normalCount >= 6 && spiritsFull ? '(정령 한도 초과)' : `(${6 - normalCount % 6}개 더 필요)`}
         </div>
         <div style="font-size:0.85em;color:var(--text-muted);">
           레전드 조각: <b style="color:var(--gold);">${legendFragments}</b>개 (펫 진화용)
@@ -230,6 +243,11 @@ export default class SummoningRoomScene {
 
   // ── 자동 매칭 소환 ──
   _doAutoSummon() {
+    if (GameState.spirits.length >= (GameState.MAX_SPIRITS || 10)) {
+      showToast('더이상 소환할수 없습니다');
+      return;
+    }
+
     const matchResult = autoMatchParts(GameState.spiritItems);
     if (!matchResult.success) {
       showToast('조각이 부족합니다!');

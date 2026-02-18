@@ -5,6 +5,7 @@
 // ====================================================
 
 import { GOLDEN_MIMIC } from './golden-mimic-config.js';
+import { MARBLE_SCALING } from './balance-config.js';
 
 // --- 마블 타일 드랍 테이블 ---
 // weight: 등장 가중치 (전체 합 대비 확률)
@@ -88,6 +89,37 @@ export function rollMarbleDrop() {
     if (roll <= 0) return { ...drop };
   }
   return { ...MARBLE_DROP_TABLE[0] };
+}
+
+
+// --- 스케일링된 마블 드랍 (스테이지별 골드/등급 보정) ---
+export function rollMarbleDropScaled(stageId, comboCount = 0) {
+  const drop = rollMarbleDrop();
+
+  // 골드 스케일링
+  if (drop.type === 'gold') {
+    drop.value = MARBLE_SCALING.goldReward(stageId, comboCount);
+  }
+
+  // 장비 등급 스케일링: 스테이지에 맞는 등급으로 업그레이드 가능
+  if (drop.type === 'equip' && !drop.rare) {
+    const rolledRarity = MARBLE_SCALING.rollRarity(stageId);
+    const rarityOrder = ['common', 'rare', 'epic', 'legendary'];
+    const currentIdx = rarityOrder.indexOf(drop.rarity);
+    const rolledIdx = rarityOrder.indexOf(rolledRarity);
+    if (rolledIdx > currentIdx) {
+      drop.rarity = rolledRarity;
+      // 등급 상승 시 스탯 보정
+      const mult = 1 + rolledIdx * 0.5;
+      if (drop.stats) {
+        for (const key of Object.keys(drop.stats)) {
+          drop.stats[key] = Math.round(drop.stats[key] * mult);
+        }
+      }
+    }
+  }
+
+  return drop;
 }
 
 

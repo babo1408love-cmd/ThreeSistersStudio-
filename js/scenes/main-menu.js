@@ -58,7 +58,8 @@ export default class MainMenuScene {
           <button class="mm-nav-btn" id="btn-dungeon">🏰<br>던전</button>
           <button class="mm-nav-btn" id="btn-summon-tree">🌳<br>소환나무</button>
           <button class="mm-nav-btn" id="btn-gacha">🎰<br>소환</button>
-          <button class="mm-nav-btn" id="btn-inventory">🎒<br>인벤토리</button>
+          <button class="mm-nav-btn" id="btn-hero">🧚<br>영웅</button>
+          <button class="mm-nav-btn" id="btn-inventory">🎒<br>인벤</button>
           <button class="mm-nav-btn" id="btn-quest">📋<br>퀘스트</button>
           <button class="mm-nav-btn" id="btn-shop">🏪<br>상점</button>
           <button class="mm-nav-btn" id="btn-arena">🏟️<br>아레나</button>
@@ -106,6 +107,9 @@ export default class MainMenuScene {
       bind('#btn-dungeon', () => SceneManager.go('dungeon'));
       bind('#btn-summon-tree', () => { SaveManager.load(); SceneManager.go('summoning'); });
       bind('#btn-gacha', () => SceneManager.go('gacha'));
+      bind('#btn-hero', () => {
+        import('../ui/hero-screen.js').then(m => m.openHeroScreen());
+      });
       bind('#btn-inventory', () => {
         import('../ui/inventory-ui.js').then(m => m.openInventory());
       });

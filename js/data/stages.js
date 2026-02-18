@@ -7,11 +7,12 @@
  * 난이도: normal/hard/hell/nightmare
  * 별 3개: 클리어/무피해/시간내
  */
+import { STAGE_DIFFICULTY } from './balance-config.js';
 
 // ── 기존 스테이지 (레거시 호환) ──
 const LEGACY_STAGES = [
   { id:1, name:'포자의 숲 입구', description:'평화롭던 숲에 포자의 기운이 퍼지기 시작했다',
-    candy:{targetScore:800,moves:40,cols:7,rows:11}, marble:{shots:20,gridSize:5},
+    candy:{targetScore:800,moves:40,cols:7,rows:11,matchTarget:STAGE_DIFFICULTY.matchTarget(1),gemCount:STAGE_DIFFICULTY.gemCount(1)}, marble:{shots:20,gridSize:5},
     combat:{ waves:[
       {enemies:[{type:'spore_fairy',count:5}],delay:0},
       {enemies:[{type:'spore_fairy',count:4},{type:'thorn_sprite',count:2}],delay:15000},
@@ -19,7 +20,7 @@ const LEGACY_STAGES = [
     ], bossWave:null },
     rewards:{gold:200,expBonus:50} },
   { id:2, name:'감염된 동굴', description:'포자에 깊이 잠식된 어둠의 동굴',
-    candy:{targetScore:1200,moves:35,cols:7,rows:11}, marble:{shots:18,gridSize:5},
+    candy:{targetScore:1200,moves:35,cols:7,rows:11,matchTarget:STAGE_DIFFICULTY.matchTarget(2),gemCount:STAGE_DIFFICULTY.gemCount(2)}, marble:{shots:18,gridSize:5},
     combat:{ waves:[
       {enemies:[{type:'thorn_sprite',count:6}],delay:0},
       {enemies:[{type:'thorn_sprite',count:4},{type:'moss_golem',count:3}],delay:12000},
@@ -27,7 +28,7 @@ const LEGACY_STAGES = [
     ], bossWave:{enemies:[{type:'boss_infected_elder',count:1}],delay:40000} },
     rewards:{gold:400,expBonus:100} },
   { id:3, name:'오염된 호수', description:'대마왕의 포자에 오염된 신비의 호수',
-    candy:{targetScore:1500,moves:30,cols:7,rows:11}, marble:{shots:16,gridSize:5},
+    candy:{targetScore:1500,moves:30,cols:7,rows:11,matchTarget:STAGE_DIFFICULTY.matchTarget(3),gemCount:STAGE_DIFFICULTY.gemCount(3)}, marble:{shots:16,gridSize:5},
     combat:{ waves:[
       {enemies:[{type:'moss_golem',count:5},{type:'fungal_beast',count:2}],delay:0},
       {enemies:[{type:'fungal_beast',count:4},{type:'spore_caster',count:2}],delay:12000},
@@ -35,7 +36,7 @@ const LEGACY_STAGES = [
     ], bossWave:{enemies:[{type:'boss_lake_corruption',count:1},{type:'spore_caster',count:2}],delay:38000} },
     rewards:{gold:600,expBonus:150} },
   { id:4, name:'버섯돌이 대마왕의 성', description:'모든 감염의 근원, 대마왕과의 최후의 결전',
-    candy:{targetScore:2000,moves:30,cols:7,rows:11}, marble:{shots:15,gridSize:5},
+    candy:{targetScore:2000,moves:30,cols:7,rows:11,matchTarget:STAGE_DIFFICULTY.matchTarget(4),gemCount:STAGE_DIFFICULTY.gemCount(4)}, marble:{shots:15,gridSize:5},
     combat:{ waves:[
       {enemies:[{type:'fungal_beast',count:4},{type:'spore_caster',count:3}],delay:0},
       {enemies:[{type:'bark_knight',count:3},{type:'spore_caster',count:2}],delay:10000},
@@ -174,11 +175,19 @@ function _generateRegionStages(region, regionIdx) {
       type: stageType,
       description: `${region.desc}`,
       mapTheme: region.mapTheme,
-      candy: {
-        targetScore: 600 + globalId * 60,
-        moves: Math.max(20, 45 - Math.floor(globalId / 10)),
-        cols: 7, rows: 11,
-      },
+      candy: (() => {
+        const mt = STAGE_DIFFICULTY.matchTarget(globalId);
+        const mv = STAGE_DIFFICULTY.moves(globalId, mt);
+        const { cols, rows } = STAGE_DIFFICULTY.boardSize(globalId);
+        const gc = STAGE_DIFFICULTY.gemCount(globalId);
+        return {
+          targetScore: 600 + globalId * 60,
+          moves: mv,
+          cols, rows,
+          matchTarget: mt,
+          gemCount: gc,
+        };
+      })(),
       marble: { shots: Math.max(10, 22 - Math.floor(globalId / 15)), gridSize: 5 },
       combat: { waves, bossWave },
       staminaCost: 6,

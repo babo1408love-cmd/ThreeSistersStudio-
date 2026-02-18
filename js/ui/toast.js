@@ -1,29 +1,7 @@
-// Toast notifications
-export function showToast(message, duration = 2000) {
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = message;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), duration);
-}
-
-export function showComboText(text) {
-  const el = document.createElement('div');
-  el.className = 'combo-text';
-  el.textContent = text;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 600);
-}
-
-export function showScoreFloat(points, x, y) {
-  const el = document.createElement('div');
-  el.className = 'score-float';
-  el.style.left = (x || (30 + Math.random() * 40)) + '%';
-  el.style.top = (y || (30 + Math.random() * 20)) + '%';
-  el.textContent = '+' + points;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 500);
-}
+// Toast notifications — 실시간 자막 비활성화
+export function showToast(message, duration = 2000) { return; }
+export function showComboText(text) { return; }
+export function showScoreFloat(points, x, y) { return; }
 
 export function showConfetti() {
   const emojis = ['🎉', '✨', '⭐', '💎', '🌈', '🎊'];

@@ -11,7 +11,12 @@
 import GameState from '../core/game-state.js';
 import EventBus from '../core/event-bus.js';
 import { SURVIVAL_MOBS, AI_BEHAVIORS, getMonsterById } from '../data/monsters.js';
-import { generateMap, renderMap } from '../generators/map-generator.js';
+import { generateMap, renderMap, generateSurvivorMap, renderSurvivorMap } from '../generators/map-generator.js';
+import StageTimer from '../systems/stage-timer.js';
+import AutoScroll from '../systems/auto-scroll.js';
+import BossApproachSystem from '../systems/boss-approach.js';
+import AutoWalk from '../systems/auto-walk.js';
+import RageSystem from '../systems/rage-system.js';
 
 // ── 서바이벌 맵 10종 ──
 const SURVIVAL_BIOMES = [
@@ -61,14 +66,19 @@ class SurvivalEngine {
     this.biome = SURVIVAL_BIOMES.find(b => b.id === this.biomeId) || SURVIVAL_BIOMES[0];
     this.onGameOver = options.onGameOver || (() => {});
 
-    // Map
-    this.map = generateMap(this.biome.theme, 40, 8);
+    // Map — 3분 서바이벌 맵 (바닥+사물+배틀아레나 통합)
+    this.map = generateSurvivorMap({
+      themeId: this.biome.theme,
+      stageLevel: 1,
+      scrollSpeed: 0.5,
+      scrollAccel: 0.00006,
+    });
     this.camera = { x: 0, y: 0 };
 
-    // Player
+    // Player (맵 시작점 근처, 수직 중앙)
     const ps = GameState.player;
     this.player = {
-      x: this.map.mapW / 2, y: this.map.mapH / 2,
+      x: 120, y: this.map.mapH / 2,
       hp: ps.maxHp || 250, maxHp: ps.maxHp || 250,
       attack: ps.attack || 12, defense: ps.defense || 7,
       speed: 2.8, radius: 16,
@@ -105,16 +115,50 @@ class SurvivalEngine {
     // Purify base chance
     this.basePurifyChance = 25; // 25% base
 
-    // Rage
-    this.rageGauge = 0;
-    this.rageActive = false;
-    this.rageTimer = 0;
+    // Rage (등급별 발동 횟수 제한)
+    this.rageSystem = new RageSystem({
+      maxTriggers: RageSystem.resolveMaxTriggers(GameState),
+    });
 
     // Input
     this._keys = {};
     this._touchDir = { x: 0, y: 0 };
     this._touchStart = null;
     this._mouseDown = false;
+
+    // ⏰ 스테이지 타이머 (3분)
+    this.stageTimer = new StageTimer({
+      duration: 180000,
+      onTimeUp: () => this._onTimerEnd(),
+    });
+
+    // 🌫️ 자동 전진 (포자 안개)
+    this.autoScroll = new AutoScroll({
+      speed: 0.5,
+      direction: 'horizontal',
+      startBoundary: 0,
+      warningZone: 100,
+      damagePerSec: 20,
+      pushForce: 1.8,
+      accel: 0.00006,
+    });
+
+    // 화면 흔들림 상태
+    this._screenShake = null;
+
+    // 보스 접근 시스템 (우측에서 보스가 다가옴)
+    this.bossApproach = new BossApproachSystem(this, {
+      mapWidth: this.map.mapW,
+      mapHeight: this.map.mapH,
+      stageLevel: 1,
+      autoScroll: this.autoScroll,
+    });
+
+    // 🚶 자동 전진 (3분에 보스와 만나는 속도)
+    this.autoWalk = new AutoWalk({
+      mapWidth: this.map.mapW,
+      stageLevel: 1,
+    });
 
     this._bindInput();
   }
@@ -123,6 +167,13 @@ class SurvivalEngine {
     this.running = true;
     this._lastTime = performance.now();
     this._spawnWave();
+    this.stageTimer.start();
+    this.autoScroll.start();
+    this.autoWalk.start();
+    // 5초 후 보스 접근 시작
+    setTimeout(() => {
+      if (this.running) this.bossApproach.start();
+    }, this.bossApproach.startDelay);
     this._loop();
   }
 
@@ -147,6 +198,52 @@ class SurvivalEngine {
   //  UPDATE
   // ══════════════════════════════════════
   _update(dt) {
+    // ⏰ 타이머
+    this.stageTimer.update(dt);
+
+    // Screen shake update
+    if (this._screenShake) {
+      this._screenShake.timer += dt;
+      if (this._screenShake.timer >= this._screenShake.duration) {
+        this._screenShake = null;
+      }
+    }
+
+    // 보스 접근 시스템 업데이트
+    this.bossApproach.update(dt);
+
+    // 보스 접근이 보스전 페이즈 → 보스방 전투 위임
+    if (this.bossApproach.isInBossPhase()) {
+      this._updatePlayer(dt);
+      this._updateAutoAttack(dt);
+      this._updateEnemies(dt);
+      this._updateProjectiles(dt);
+      this._updatePurifiedAllies(dt);
+      this._updateDroppedItems();
+      this._updateParticles(dt);
+      this._updateRage(dt);
+      this._updateCamera();
+      this._checkVictory();
+      return;
+    }
+
+    // 보스 접근 블로킹 중 (MEETING/ARENA_FORMING)
+    if (this.bossApproach.isBlocking()) {
+      this._updateParticles(dt);
+      this._updateCamera();
+      this._checkVictory();
+      return;
+    }
+
+    // 🌫️ 자동 전진
+    const scrollResult = this.autoScroll.update(dt, this.player);
+    if (scrollResult.damage > 0) {
+      this._damagePlayer(scrollResult.damage);
+    }
+    if (scrollResult.pushX) {
+      this.player.x += scrollResult.pushX;
+    }
+
     this._updateWaveTimer(dt);
     this._updatePlayer(dt);
     this._updateAutoAttack(dt);
@@ -225,18 +322,28 @@ class SurvivalEngine {
     });
   }
 
-  // ── Player ──
+  // ── Player (좌우 이동만) ──
   _updatePlayer(dt) {
+    // 🚶 자동 전진 (보스전 진입 시 정지)
+    if (this.bossApproach.isBlocking() || this.bossApproach.isInBossPhase()) {
+      this.autoWalk.pause();
+    } else {
+      this.autoWalk.resume();
+    }
+    this.autoWalk.update(dt, this.player);
+
     let mx = (this._keys['d'] || this._keys['arrowright'] ? 1 : 0) - (this._keys['a'] || this._keys['arrowleft'] ? 1 : 0) + this._touchDir.x;
-    let my = (this._keys['s'] || this._keys['arrowdown'] ? 1 : 0) - (this._keys['w'] || this._keys['arrowup'] ? 1 : 0) + this._touchDir.y;
-    const mag = Math.sqrt(mx * mx + my * my);
-    if (mag > 1) { mx /= mag; my /= mag; }
+    if (mx > 1) mx = 1;
+    if (mx < -1) mx = -1;
 
     const spd = this.player.speed * (dt / 16);
     this.player.x += mx * spd;
-    this.player.y += my * spd;
-    this.player.x = Math.max(16, Math.min(this.map.mapW - 16, this.player.x));
-    this.player.y = Math.max(16, Math.min(this.map.mapH - 16, this.player.y));
+    const minX = Math.max(16, this.autoScroll.getBoundary() + 10);
+    // 보스 접근 시 우측 경계도 클램핑
+    const maxX = this.bossApproach.getPhase() !== 'dormant'
+      ? Math.min(this.map.mapW - 16, this.bossApproach.getBoundary() - 20)
+      : this.map.mapW - 16;
+    this.player.x = Math.max(minX, Math.min(maxX, this.player.x));
     this.player.bobPhase += dt * 0.004;
 
     // 정화된 적 접촉 체크 (빙빙 도는 애 건드리면 아군 편입)
@@ -268,7 +375,7 @@ class SurvivalEngine {
     if (!nearest || minDist > 300) return;
 
     const angle = Math.atan2(nearest.y - this.player.y, nearest.x - this.player.x);
-    const dmgMult = this.rageActive ? 2.0 : 1.0;
+    const dmgMult = this.rageSystem.getDamageMultiplier();
 
     for (let i = 0; i < this.player.shotCount; i++) {
       const spread = (i - (this.player.shotCount - 1) / 2) * 0.15;
@@ -386,7 +493,7 @@ class SurvivalEngine {
     }
 
     // Rage charge
-    this.rageGauge = Math.min(100, this.rageGauge + 8);
+    this._addRage(8);
 
     // 정화 체크
     const purifyChance = Math.max(5, this.basePurifyChance - this.currentWave * 0.5 + this.purifyBonusChance);
@@ -539,25 +646,29 @@ class SurvivalEngine {
   }
 
   _updateRage(dt) {
-    if (this.rageActive) {
-      this.rageTimer -= dt;
-      if (this.rageTimer <= 0) this.rageActive = false;
-    }
-    if (!this.rageActive && this.rageGauge >= 100) {
-      this.rageActive = true;
-      this.rageGauge = 0;
-      this.rageTimer = 5000;
+    this.rageSystem.update(dt);
+  }
+
+  _addRage(amount) {
+    const shouldTrigger = this.rageSystem.add(amount);
+    if (shouldTrigger) {
+      if (!this.rageSystem.trigger()) return; // 횟수 소진
+      const remaining = this.rageSystem.getTriggersRemaining();
+      const maxT = this.rageSystem.getMaxTriggers();
       this.particles.push({
         x: this.player.x, y: this.player.y - 40,
-        text: '💢 분노 폭발!', color: '#ff6b6b', type: 'text',
+        text: `\uD83D\uDCA2 \uBD84\uB178 \uD3ED\uBC1C! (${maxT - remaining}/${maxT})`,
+        color: '#ff6b6b', type: 'text',
         life: 2000, vy: -0.5, vx: 0,
       });
     }
   }
 
   _updateCamera() {
-    const targetX = this.player.x - this.W / 2;
-    const targetY = this.player.y - this.H / 2;
+    // 서바이벌: 45도 뒤통수 카메라 — 플레이어를 화면 하단 65%에 배치
+    // → 전방(위쪽) 65%, 뒤(아래) 35% 시야 = 뒤에서 내려다보는 느낌
+    const targetX = this.player.x - this.W * 0.35;  // 약간 전방 오프셋
+    const targetY = this.player.y - this.H * 0.65;  // 플레이어가 화면 아래쪽
     this.camera.x += (targetX - this.camera.x) * 0.08;
     this.camera.y += (targetY - this.camera.y) * 0.08;
     this.camera.x = Math.max(0, Math.min(this.map.mapW - this.W, this.camera.x));
@@ -569,7 +680,7 @@ class SurvivalEngine {
     this.player.hp -= dmg;
     if (this.player.hp < 0) this.player.hp = 0;
     this._spawnHitParticles(this.player.x, this.player.y, '#ff6b6b');
-    this.rageGauge = Math.min(100, this.rageGauge + 12);
+    this._addRage(12);
 
     if (this.player.hp <= 0) {
       this.running = false;
@@ -586,16 +697,58 @@ class SurvivalEngine {
     this.player.hp = Math.min(this.player.maxHp, this.player.hp + amount);
   }
 
+  /** 타이머 종료 → 보스 접근 급가속 (3분 생존 후 보스 조우로 전환) */
+  _onTimerEnd() {
+    if (!this.running) return;
+    // 보스 접근 시스템에 타이머 종료 알림 → 급가속
+    this.bossApproach.onTimerEnd();
+  }
+
+  /** 보스 접근 시스템에서 호출하는 승리 체크 */
+  _checkVictory() {
+    if (this.bossApproach.getPhase() === 'complete') {
+      this.running = false;
+      this.onGameOver({
+        wave: this.currentWave,
+        kills: this.totalKills,
+        gold: this.totalGold,
+        purified: this.purifiedCount,
+        bossDefeated: true,
+      });
+    }
+  }
+
   // ══════════════════════════════════════
   //  DRAW
   // ══════════════════════════════════════
   _draw() {
     const ctx = this.ctx;
-    const cx = this.camera.x;
-    const cy = this.camera.y;
 
-    // Map
-    renderMap(ctx, this.map, this.camera);
+    // 화면 흔들림 오프셋 적용
+    let shakeX = 0, shakeY = 0;
+    if (this._screenShake) {
+      const t = this._screenShake.timer / this._screenShake.duration;
+      const fade = 1 - t;
+      const intensity = this._screenShake.intensity * fade;
+      shakeX = (Math.random() - 0.5) * intensity * 2;
+      shakeY = (Math.random() - 0.5) * intensity * 2;
+    }
+
+    const cx = this.camera.x + shakeX;
+    const cy = this.camera.y + shakeY;
+
+    // Map (서바이벌 맵: 열 기반 최적화 렌더링)
+    if (this.map.survivorMode) {
+      renderSurvivorMap(ctx, this.map, this.camera);
+    } else {
+      renderMap(ctx, this.map, this.camera);
+    }
+
+    // 🌫️ 자동전진 어둠 벽
+    this.autoScroll.draw(ctx, this.camera, this.W, this.H);
+
+    // 🍄 보스 접근 붉은 안개 (우측에서 접근)
+    this.bossApproach.draw(ctx, this.camera, this.W, this.H);
 
     // Dropped items
     this.droppedItems.forEach(item => {
@@ -683,32 +836,33 @@ class SurvivalEngine {
     // Player
     this._drawPlayer(ctx, cx, cy);
 
-    // Particles
+    // Particles (텍스트 자막 비활성화 — 원형 이펙트만)
     this.particles.forEach(p => {
+      if (p.type === 'text') return;
       const sx = p.x - cx;
       const sy = p.y - cy;
       const alpha = Math.max(0, p.life / 1200);
       ctx.globalAlpha = alpha;
-      if (p.type === 'text') {
-        ctx.font = 'bold 13px "Noto Sans KR", sans-serif';
-        ctx.textAlign = 'center'; ctx.fillStyle = p.color;
-        ctx.fillText(p.text, sx, sy);
-      } else {
-        ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(sx, sy, p.size || 2, 0, Math.PI * 2); ctx.fill();
-      }
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(sx, sy, p.size || 2, 0, Math.PI * 2); ctx.fill();
     });
     ctx.globalAlpha = 1;
 
     // HUD
     this._drawHUD(ctx);
+
+    // 보스 오버레이 (HUD 위에 렌더링 — 보스 HP바, 출현/승리 텍스트, 조우/아레나 형성)
+    if (this.bossApproach.isInBossPhase() && this.bossApproach.bossRoomSystem) {
+      this.bossApproach.bossRoomSystem.drawOverlays(ctx);
+    }
+    this.bossApproach.drawOverlays(ctx, this.camera, this.W, this.H);
   }
 
   _drawPlayer(ctx, cx, cy) {
     const p = this.player;
     const sx = p.x - cx;
     const sy = p.y - cy + Math.sin(p.bobPhase) * 3;
-    if (this.rageActive) { ctx.shadowColor = 'rgba(255,50,50,0.6)'; ctx.shadowBlur = 20; }
+    if (this.rageSystem.isActive()) { ctx.shadowColor = 'rgba(255,50,50,0.6)'; ctx.shadowBlur = 20; }
     ctx.font = '28px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(p.emoji, sx, sy);
     ctx.shadowBlur = 0;
@@ -738,12 +892,22 @@ class SurvivalEngine {
     // Rage bar
     const rageY = hpY + 14;
     ctx.fillStyle = 'rgba(30,30,50,0.8)'; ctx.fillRect(pad, rageY, barW, 6);
-    ctx.fillStyle = this.rageActive ? '#ff3333' : '#ff6b6b';
-    ctx.fillRect(pad, rageY, barW * (this.rageGauge / 100), 6);
+    const svRageExhausted = this.rageSystem.isExhausted();
+    ctx.fillStyle = svRageExhausted ? '#555' : this.rageSystem.isActive() ? '#ff3333' : '#ff6b6b';
+    ctx.fillRect(pad, rageY, barW * (this.rageSystem.getGauge() / 100), 6);
+    // 남은 횟수 표시
+    const svRem = this.rageSystem.getTriggersRemaining();
+    const svMax = this.rageSystem.getMaxTriggers();
+    ctx.fillStyle = svRageExhausted ? '#666' : '#ff6b6b';
+    ctx.font = '9px sans-serif'; ctx.textAlign = 'right';
+    ctx.fillText(svRageExhausted ? '\uD83D\uDCA2\uC18C\uC9C4' : `\u26A1${svRem}/${svMax}`, pad + barW, rageY - 1);
 
     // Stats
     ctx.fillStyle = '#fff'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
     ctx.fillText(`💀${this.totalKills}  💰${this.totalGold}G  💚${this.purifiedAllies.length}아군`, pad, rageY + 18);
+
+    // ⏰ 스테이지 타이머 (상단 중앙)
+    this.stageTimer.drawHUD(ctx, this.W / 2 - 22, pad + 10);
 
     // Timer (다음 웨이브)
     const nextWaveSec = Math.ceil((this.waveInterval - this.waveTimer) / 1000);

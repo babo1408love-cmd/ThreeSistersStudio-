@@ -23,10 +23,72 @@ import RankingScene from './scenes/ranking-scene.js';
 // UI
 import { openInventory, closeInventory } from './ui/inventory-ui.js';
 
+// 씬 → BGM 매핑 (SoundBGM.SCENES 키 참조)
+const SCENE_BGM = {
+  menu:       'title',
+  stage1:     'puzzle',
+  summoning:  'gacha',
+  stage2:     'battle',
+  gameover:   'defeat',
+  worldmap:   'map',
+  survival:   'battle',
+  dungeon:    'battle',
+  gacha:      'gacha',
+  quest:      'map',
+  shop:       'shop',
+  arena:      'boss',
+  codex:      'rest',
+  ranking:    'rest',
+};
+
 // Initialize
 function init() {
   const app = document.getElementById('app');
   SceneManager.init(app);
+
+  // 사운드 초기화 (첫 사용자 인터랙션에서 활성화 — 브라우저 정책)
+  const initSound = () => {
+    if (window.SoundEngine && !SoundEngine._initialized) {
+      SoundEngine.init();
+      // 저장된 볼륨 설정 복원
+      const savedSound = GameState.settings && GameState.settings.sound;
+      if (savedSound) {
+        SoundEngine.setMusicVolume((savedSound.bgm ?? 80) / 100);
+        SoundEngine.setSfxVolume((savedSound.sfx ?? 80) / 100);
+        SoundEngine.setUIVolume((savedSound.sfx ?? 80) / 100);
+      }
+      console.log('[Main] SoundEngine 초기화 완료');
+    }
+    if (window.SoundEngine) SoundEngine.resume();
+    document.removeEventListener('click', initSound);
+    document.removeEventListener('touchstart', initSound);
+    document.removeEventListener('keydown', initSound);
+  };
+  document.addEventListener('click', initSound, { once: false });
+  document.addEventListener('touchstart', initSound, { once: false });
+  document.addEventListener('keydown', initSound, { once: false });
+
+  // 미술 엔진 초기화 (ArtEngine ↔ MonglelbelEngine 연동 + ArtUI 오버레이)
+  if (window.ArtEngine) {
+    ArtEngine.connectToEngine();
+  }
+  if (window.ArtEnvironment) {
+    ArtEnvironment.connectToEngine();
+  }
+  if (window.ArtUI) {
+    ArtUI.init();
+  }
+
+  // 텍스트 엔진 초기화 (다국어 폰트 + 렌더러 + i18n)
+  if (window.TextEngine) {
+    TextEngine.init({ lang: 'ko' });
+  }
+  if (window.TextRenderer) {
+    TextRenderer.connectToEngine();
+  }
+  if (window.TextI18n) {
+    TextI18n.setLanguage('ko');
+  }
 
   // Register all scenes
   SceneManager.register('menu', MainMenuScene);
@@ -68,6 +130,27 @@ function init() {
   EventBus.on('scene:changed', ({ to }) => {
     if (to !== 'menu' && to !== 'gameover') {
       SaveManager.save();
+    }
+  });
+
+  // 씬 전환 시 BGM 크로스페이드 + UI SFX
+  EventBus.on('scene:changed', ({ from, to, params }) => {
+    // BGM 전환
+    if (window.SoundBGM && SoundEngine._initialized) {
+      const bgmKey = SCENE_BGM[to] || 'map';
+
+      // gameover는 승리/패배에 따라 분기
+      if (to === 'gameover' && params && params.victory) {
+        SoundBGM.crossFade('victory', 1.0);
+      } else if (from) {
+        SoundBGM.crossFade(bgmKey, 1.2);
+      } else {
+        SoundBGM.play(bgmKey);
+      }
+    }
+    // 씬 전환 UI 사운드
+    if (window.SoundSFX && SoundEngine._initialized) {
+      SoundSFX.menuOpen();
     }
   });
 

@@ -2,7 +2,9 @@
  * summon-evolution.js — 소환나무 보관함
  * 6부위 파편(head/body/wings/legs/aura/core) 수집
  * 레전드 6부위 모으면 소환, evolvePet, generatePetFromEvolution
+ * UnitFactory 연동: 펫 생성 시 UnitFactory.createPet() 사용
  */
+import UnitFactory from '../data/unit-factory.js';
 
 export const FRAGMENT_PARTS = ['head','body','wings','legs','aura','core'];
 
@@ -176,7 +178,7 @@ export class SummonTree {
     return next;
   }
 
-  // ── 일반 펫 습득 (진화 재료로 생성) ──
+  // ── 일반 펫 습득 (진화 재료로 생성, UnitFactory 경유) ──
   generatePetFromEvolution(attribute = 'nature') {
     const cost = { evo_stone_s: 5, life_dew: 3 };
     for (const [matId, need] of Object.entries(cost)) {
@@ -185,16 +187,12 @@ export class SummonTree {
     for (const [matId, need] of Object.entries(cost)) {
       this.materials[matId] -= need;
     }
-    return {
-      id: 'pet_' + Date.now(),
-      name: '작은 정령',
-      emoji: '💚',
+    return UnitFactory.createPet({
       attribute,
       rarity: 'common',
       level: 1,
-      stats: { maxHp: 40, healPower: 5, defense: 3, speed: 4 },
       evolutionStage: 1,
-    };
+    });
   }
 
   // ── 직렬화 ──

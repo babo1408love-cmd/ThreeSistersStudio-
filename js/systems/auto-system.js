@@ -21,13 +21,17 @@ class AutoSystem {
   init() {
     if (!GameState.autoSettings) {
       GameState.autoSettings = {
-        autoBattle: false,
-        autoSkill: false,
-        autoPotion: false,
+        autoBattle: true,
+        autoSkill: true,
+        autoPotion: true,
         autoRepeat: false,
         potionThreshold: DEFAULT_POTION_THRESHOLD,
       };
     }
+    // 항상 자동 강제 (설정 토글 없음)
+    GameState.autoSettings.autoBattle = true;
+    GameState.autoSettings.autoSkill = true;
+    GameState.autoSettings.autoPotion = true;
     this._bindEvents();
   }
 

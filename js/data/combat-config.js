@@ -77,17 +77,17 @@ export const UNLOCK_PROGRESSION = {
 
 export const BOSS_ROOM_CONFIG = {
 
-  // --- 보스방 공간 설계 ---
+  // --- 보스방 공간 설계 (전맵 크기) ---
   arena: {
-    // 축구장급 넓은 독립 공간
-    width: 1200,               // 캔버스 논리 너비
-    height: 800,               // 캔버스 논리 높이
+    // 전맵 규모 배틀아레나
+    width: 4000,               // 캔버스 논리 너비 (카메라 스크롤)
+    height: 2000,              // 캔버스 논리 높이 (카메라 스크롤)
     // 실제 이동 가능 영역 (벽 안쪽)
     playArea: {
       x: 60,
       y: 60,
-      width: 1080,             // 1200 - 60*2
-      height: 680,             // 800 - 60*2
+      width: 3880,             // 4000 - 60*2
+      height: 1880,            // 2000 - 60*2
     },
     movementType: 'free',      // 전방향 자유 이동
 
@@ -177,9 +177,9 @@ export const BOSS_ROOM_CONFIG = {
 
   // --- 보스 HP 바 (상단 고정) ---
   bossHpBar: {
-    position: 'top',           // 화면 상단 고정
+    position: 'top',           // 화면 상단 고정 (HUD 패널 아래)
     height: 28,
-    margin: 12,
+    margin: 88,                // HUD 영역(~84px) 아래에 배치
     showName: true,            // 보스 이름 표시
     showEmoji: true,           // 보스 이모지 표시
     // 단계별 색상 변화
@@ -285,6 +285,37 @@ export const BOSS_ROOM_CONFIG = {
     },
     // content-backlog.js의 aerial_combat 참조
     backlogRef: 'aerial_combat',
+  },
+};
+
+// ====================================================
+// 보스 접근 시스템 (Boss Approach) — 우측에서 보스가 다가옴
+// ====================================================
+// 좌측 포자안개(AutoScroll) + 우측 보스접근(BossApproach) → 집게 효과
+// 플레이어 영역 점점 축소 → 만남 → 배틀아레나 동적 생성 → 보스전
+export const BOSS_APPROACH_CONFIG = {
+  baseSpeed: 0.3,              // px/frame @60fps
+  accel: 0.00004,              // 가속도/ms
+  warningZone: 150,            // 경고 구간 px
+  timerAccelMultiplier: 5.0,   // 타이머 종료 후 속도 배율
+  timerAccelMinSpeed: 8.0,     // 타이머 종료 후 최소 속도
+  minGap: 300,                 // AutoScroll과 최소 간격 px
+  arenaFormDuration: 1500,     // 아레나 형성 시간 ms
+  meetingDuration: 500,        // 만남 전환 시간 ms
+  startDelay: 5000,            // 스테이지 시작 후 접근 시작 딜레이 ms
+  bossRoomTimeLimit: 300000,   // 보스방 최대 시간 ms (5분) → 초과 시 자동 클리어
+  visual: {
+    fogColorInner: 'rgba(60,0,0,0.9)',
+    fogColorOuter: 'rgba(120,20,30,0)',
+    particleColor: '#ff4444',
+    bossEmoji: '\uD83C\uDF44',    // 🍄
+    warningEmoji: '\u2620\uFE0F', // ☠️
+  },
+  stageOverrides: {
+    1: { baseSpeed: 0.2, accel: 0.00003 },
+    2: { baseSpeed: 0.3, accel: 0.00004 },
+    3: { baseSpeed: 0.35, accel: 0.00005 },
+    4: { baseSpeed: 0.4, accel: 0.00006 },
   },
 };
 
