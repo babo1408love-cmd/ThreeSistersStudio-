@@ -1656,9 +1656,9 @@ export default class CandyMatch {
       const cSpd = Math.max(0.15, 0.7 - (this.comboCount - 1) * 0.08);
       await this._wait(Math.round((bestTier && bestTier.tier >= 3 ? 550 : 420) * cSpd));
 
-      // --- 매치 시 정령 파츠 드랍 ---
+      // --- 매치 시 정령 파츠 드랍 (표시만, 캔디 진행 안 멈춤) ---
       if (bestTier && MATCH_SPIRIT_DROP.enabled) {
-        await this._dropSpiritPartsFromMatch(bestTier, bestGroup);
+        this._dropSpiritPartsFromMatch(bestTier, bestGroup);
       }
 
       if (this._destroyed) return;
