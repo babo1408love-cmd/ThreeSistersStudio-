@@ -20,6 +20,7 @@ export default class MainMenuScene {
         <div class="main-menu__buttons">
           <button class="btn btn-primary btn-lg" id="btn-new-game">✨ 새 게임</button>
           ${hasSave ? '<button class="btn btn-blue btn-lg" id="btn-continue">▶️ 이어하기</button>' : ''}
+          ${hasSave ? '<button class="btn btn-secondary" id="btn-summon-tree">🌳 소환의 나무</button>' : ''}
         </div>
         <div class="main-menu__version">v1.0 — 몽글벨</div>
       </div>
@@ -29,6 +30,8 @@ export default class MainMenuScene {
     this.el.querySelector('#btn-new-game').onclick = () => this._newGame();
     if (hasSave) {
       this.el.querySelector('#btn-continue').onclick = () => this._continueGame();
+      const treeBtn = this.el.querySelector('#btn-summon-tree');
+      if (treeBtn) treeBtn.onclick = () => this._openSummonTree();
     }
   }
 
@@ -61,6 +64,11 @@ export default class MainMenuScene {
     } else {
       SceneManager.go('stage1');
     }
+  }
+
+  _openSummonTree() {
+    SaveManager.load();
+    SceneManager.go('summoning');
   }
 
   _startParticles() {
