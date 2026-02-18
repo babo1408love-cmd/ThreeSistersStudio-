@@ -68,7 +68,7 @@ export default class CandyMatch {
     this._floatingOrb = null;
     this._cellElements = {};
     this._dragGemIdx = -1;
-    this._dragMaxTime = 8000;     // 8 seconds drag time limit
+    this._dragMaxTime = 16000;    // 16 seconds drag time limit (2x)
     this._dragTimerId = null;
     this._dragTimeLeft = 0;
 
