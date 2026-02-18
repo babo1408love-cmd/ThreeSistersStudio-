@@ -37,6 +37,11 @@ const SceneManager = {
       }
     }
 
+    // 씬 전환 시 document.body에 남은 게임 팝업/오버레이 정리
+    document.querySelectorAll(
+      '.marble-event-overlay, .spirit-reward-popup, .summon-tutorial-overlay, .pad-floating-orb'
+    ).forEach(el => el.remove());
+
     // Create new scene
     const SceneClass = this._scenes[name];
     const scene = new SceneClass();

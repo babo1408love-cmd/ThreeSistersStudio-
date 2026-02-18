@@ -153,12 +153,19 @@ export default class CandyMatch {
     this._removeInitialMatches();
     this._generateMarblePath();
 
-    this._introPhase = true;
-    this._introStep = 'dice';
-    this._diceRolled = false;
-    this._heroPos = 0;
-    this._collectedItems = [];
-    this._renderIntro();
+    // skipIntro가 아닌 경우에만 인트로 실행 (보물상자/주사위/영웅이동)
+    // skipIntro 시에는 constructor에서 이미 _introPhase = false 설정됨
+    if (this._introPhase) {
+      this._introStep = 'dice';
+      this._diceRolled = false;
+      this._heroPos = 0;
+      this._collectedItems = [];
+      this._renderIntro();
+    } else {
+      this._heroPos = 0;
+      this._collectedItems = [];
+      this._render();
+    }
   }
 
   // --- Marble Path Generation ---
@@ -2507,5 +2514,37 @@ export default class CandyMatch {
     this._cleanup();
     this._removeFloatingOrb();
     this._stopDragTimer();
+    // 오류 방지: document.body에 남은 팝업/오버레이 정리
+    this._cleanupOrphanPopups();
+  }
+
+  /** document.body에 남은 게임 팝업/오버레이 제거 */
+  _cleanupOrphanPopups() {
+    const selectors = [
+      '.spirit-reward-popup',
+      '.marble-event-overlay',
+      '.match-tier-particle',
+      '.match-tier-label',
+      '.match-tier-flash',
+      '.match-drop-spirit',
+      '.match-drop-text',
+      '.fly-to-inventory',
+      '.magnet-pull-item',
+      '.rage-fly-hero',
+      '.rage-fly-slot-hero',
+      '.rage-impact-ring',
+      '.rage-impact-fragment',
+      '.rage-flash',
+      '.pet-fly-heal',
+      '.pet-heal-ring',
+      '.pet-heal-particle',
+      '.pet-heal-flash',
+      '.heal-number-float',
+      '.pad-floating-orb',
+      '.summon-tutorial-overlay',
+    ];
+    for (const sel of selectors) {
+      document.querySelectorAll(sel).forEach(el => el.remove());
+    }
   }
 }
