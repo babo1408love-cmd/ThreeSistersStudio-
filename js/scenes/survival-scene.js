@@ -104,8 +104,8 @@ class SurvivalEngine {
       }
     }
 
-    // 슬롯 영웅 (최대 2, UnitFactory 경유)
-    this.slotHeroes = GameState.heroSlots.filter(h => h != null).slice(0, 2)
+    // 슬롯 영웅 (최대 5, UnitFactory 경유)
+    this.slotHeroes = GameState.heroSlots.filter(h => h != null).slice(0, 5)
       .map((h, i) => UnitFactory.createAlly(h, { combatRole: 'slotHero', index: i, playerPos: this.player }));
 
     // 정령 (GameState에서 소환된 정령들)
@@ -417,11 +417,19 @@ class SurvivalEngine {
     }
   }
 
-  // ── Slot Heroes ──
+  // ── Slot Heroes (V-Formation: 최대 5) ──
   _updateSlotHeroes(dt) {
+    const V_POS = [
+      { dx: -25, dy: -35 },  // 0: 좌상
+      { dx: -25, dy:  35 },  // 1: 좌하
+      { dx: -45, dy: -18 },  // 2: 후좌상
+      { dx: -45, dy:  18 },  // 3: 후좌하
+      { dx: -60, dy:   0 },  // 4: 최후방 중앙
+    ];
     this.slotHeroes.forEach((h, i) => {
-      const targetX = this.player.x - 30;
-      const targetY = this.player.y + (i === 0 ? -35 : 35);
+      const pos = V_POS[i] || V_POS[V_POS.length - 1];
+      const targetX = this.player.x + pos.dx;
+      const targetY = this.player.y + pos.dy;
       h.x += (targetX - h.x) * 0.08;
       h.y += (targetY - h.y) * 0.08;
       h.atkTimer -= dt;

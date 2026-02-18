@@ -611,10 +611,16 @@ const UnitFactory = {
       attribute: allyDef.attribute || 'light',
     };
 
-    // combatRole에 따른 위치 조정
+    // combatRole에 따른 V-Formation 위치 (최대 5영웅)
     if (options.combatRole === 'slotHero' && options.playerPos) {
-      ally.x = options.playerPos.x - 30;
-      ally.y = options.playerPos.y + (options.index === 0 ? -35 : 35);
+      const V_POS = [
+        { dx: -25, dy: -35 }, { dx: -25, dy: 35 },
+        { dx: -45, dy: -18 }, { dx: -45, dy: 18 },
+        { dx: -60, dy: 0 },
+      ];
+      const pos = V_POS[options.index] || V_POS[V_POS.length - 1];
+      ally.x = options.playerPos.x + pos.dx;
+      ally.y = options.playerPos.y + pos.dy;
     }
 
     return ally;

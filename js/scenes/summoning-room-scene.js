@@ -10,6 +10,8 @@ import { showConfetti, showToast } from '../ui/toast.js';
 import { getRarityInfo } from '../systems/rarity-manager.js';
 import { PET_EVOLUTION, PET_EVOLUTION_POOL } from '../systems/pet-evolution-system.js';
 import { hasSummonTutorialSeen, showSummonTutorial } from '../ui/summon-tutorial.js';
+import { HERO_ROSTER } from '../data/hero-config.js';
+import { HERO_SLOT_CONFIG, isSlotUnlocked, canEquipHero } from '../data/inventory-config.js';
 
 export default class SummoningRoomScene {
   onCreate() {
@@ -72,6 +74,19 @@ export default class SummoningRoomScene {
         </div>
       </div>
 
+      <!-- 파티 편성 (5영웅 + 1펫) -->
+      <div style="margin:16px 0 8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="color:var(--text-secondary);font-size:0.85em;">
+            ⚔️ 파티 편성 (영웅 ${GameState.heroSlots.filter(h=>h).length}/5 | 펫 ${GameState.petSlot ? 1 : 0}/1)
+          </div>
+          <button class="btn btn-sm btn-secondary" id="btn-auto-party" style="font-size:0.75em;">✨ 모두 편성</button>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;" id="party-slots">
+          ${this._renderPartySlots()}
+        </div>
+      </div>
+
       <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px;">
         <button class="btn btn-primary btn-lg" id="btn-depart">⚔️ 전투 출발!</button>
       </div>
@@ -119,6 +134,24 @@ export default class SummoningRoomScene {
         if (spiritId) this._deleteSpirit(spiritId, spiritKey, spiritRarity, container);
       };
     });
+
+    // 파티 슬롯 클릭 바인딩 (영웅 선택)
+    container.querySelectorAll('.party-hero-slot').forEach(slot => {
+      slot.onclick = () => {
+        const idx = Number(slot.dataset.slotIdx);
+        this._showHeroPicker(idx, container);
+      };
+    });
+    // 펫 슬롯 클릭
+    const petSlotEl = container.querySelector('.party-pet-slot');
+    if (petSlotEl) {
+      petSlotEl.onclick = () => this._showPetInfo(container);
+    }
+    // 모두 편성 버튼
+    const autoPartyBtn = container.querySelector('#btn-auto-party');
+    if (autoPartyBtn) {
+      autoPartyBtn.onclick = () => this._autoAssignParty(container);
+    }
   }
 
   // ── 정령 소환 탭 ──
@@ -512,6 +545,169 @@ export default class SummoningRoomScene {
       // 화면 갱신
       if (container) this._renderContent(container);
     };
+  }
+
+  // ── 파티 편성 UI ──
+
+  _renderPartySlots() {
+    const slots = GameState.heroSlots;
+    const currentStage = GameState.currentStage || 1;
+    const playerLevel = GameState.heroLevel || 1;
+    let html = '';
+
+    // 5 영웅 슬롯
+    for (let i = 0; i < 5; i++) {
+      const hero = slots[i];
+      const unlocked = isSlotUnlocked(i, currentStage, playerLevel);
+
+      if (!unlocked) {
+        const unlockInfo = (HERO_SLOT_CONFIG.slotUnlock[i] || {});
+        html += `<div class="party-hero-slot party-slot-locked" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:rgba(40,40,60,0.7);border:2px dashed rgba(100,100,140,0.4);border-radius:8px;opacity:0.4;cursor:default;" title="${unlockInfo.label || '잠김'}">
+          <span style="font-size:1.2em;">🔒</span>
+        </div>`;
+      } else if (hero) {
+        const rarityColor = RARITY_COLORS[hero.rarity] || '#aaa';
+        html += `<div class="party-hero-slot" data-slot-idx="${i}" style="width:48px;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(40,30,60,0.8);border:2px solid ${rarityColor};border-radius:8px;cursor:pointer;position:relative;" title="${hero.name}">
+          <span style="font-size:1.3em;">${hero.emoji || '🧚'}</span>
+          <span style="font-size:0.55em;color:${rarityColor};white-space:nowrap;overflow:hidden;max-width:44px;">${hero.name}</span>
+        </div>`;
+      } else {
+        html += `<div class="party-hero-slot" data-slot-idx="${i}" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:rgba(40,30,60,0.5);border:2px dashed rgba(155,138,255,0.4);border-radius:8px;cursor:pointer;" title="영웅 배치">
+          <span style="font-size:1.2em;opacity:0.5;">👤</span>
+        </div>`;
+      }
+    }
+
+    // 1 펫 슬롯
+    const pet = GameState.petSlot;
+    if (pet) {
+      html += `<div class="party-pet-slot" style="width:48px;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(25,50,35,0.8);border:2px solid rgba(134,239,172,0.6);border-radius:8px;cursor:pointer;" title="${pet.name}">
+        <span style="font-size:1.3em;">${pet.emoji || '🐾'}</span>
+        <span style="font-size:0.55em;color:#86efac;white-space:nowrap;overflow:hidden;max-width:44px;">${pet.name}</span>
+      </div>`;
+    } else {
+      html += `<div class="party-pet-slot" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:rgba(25,50,35,0.5);border:2px dashed rgba(134,239,172,0.3);border-radius:8px;cursor:pointer;" title="펫 배치">
+        <span style="font-size:1.2em;opacity:0.5;">🐾</span>
+      </div>`;
+    }
+
+    return html;
+  }
+
+  _showHeroPicker(slotIdx, container) {
+    const currentStage = GameState.currentStage || 1;
+    const playerLevel = GameState.heroLevel || 1;
+    if (!isSlotUnlocked(slotIdx, currentStage, playerLevel)) {
+      showToast('🔒 이 슬롯은 아직 해금되지 않았습니다');
+      return;
+    }
+
+    // 현재 장착된 영웅들
+    const equipped = GameState.heroSlots.filter(h => h != null);
+
+    // 로스터에서 선택 가능한 영웅 목록
+    const available = HERO_ROSTER.filter(hero => {
+      // 이미 같은 슬롯에 장착된 건 해제 옵션으로
+      const check = canEquipHero(hero, equipped.filter((h, i) => i !== slotIdx && h));
+      return check.allowed;
+    });
+
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.style.cssText = 'z-index:9999;';
+    overlay.innerHTML = `
+      <div style="background:var(--card-bg);border:2px solid var(--purple);border-radius:12px;padding:16px;max-width:360px;max-height:80vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <span style="font-weight:700;font-size:1.1em;">⚔️ 영웅 선택 (슬롯 ${slotIdx + 1})</span>
+          <button class="btn btn-sm btn-secondary" id="picker-close">✕</button>
+        </div>
+        ${GameState.heroSlots[slotIdx] ? `
+          <button class="btn btn-sm" style="background:#ff4444;color:#fff;margin-bottom:8px;width:100%;" id="picker-remove">
+            🚫 현재 영웅 해제 (${GameState.heroSlots[slotIdx].name})
+          </button>
+        ` : ''}
+        <div style="display:flex;flex-direction:column;gap:6px;" id="hero-list">
+          ${available.map(hero => {
+            const rarityColor = RARITY_COLORS[hero.rarity] || '#aaa';
+            const isEquipped = equipped.some(h => h && h.key === hero.key);
+            return `<button class="btn btn-sm" data-hero-key="${hero.key}" style="display:flex;align-items:center;gap:8px;text-align:left;border:1px solid ${rarityColor};opacity:${isEquipped ? '0.5' : '1'};" ${isEquipped ? 'disabled' : ''}>
+              <span style="font-size:1.5em;">${hero.emoji}</span>
+              <div>
+                <div style="font-weight:700;color:${rarityColor};">${hero.name}</div>
+                <div style="font-size:0.7em;color:var(--text-muted);">${hero.passiveSkill?.description || ''}</div>
+              </div>
+            </button>`;
+          }).join('')}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#picker-close').onclick = () => overlay.remove();
+
+    const removeBtn = overlay.querySelector('#picker-remove');
+    if (removeBtn) {
+      removeBtn.onclick = () => {
+        GameState.heroSlots[slotIdx] = null;
+        SaveManager.save();
+        overlay.remove();
+        this._renderContent(container);
+      };
+    }
+
+    overlay.querySelectorAll('#hero-list button[data-hero-key]').forEach(btn => {
+      btn.onclick = () => {
+        const key = btn.dataset.heroKey;
+        const hero = HERO_ROSTER.find(h => h.key === key);
+        if (hero) {
+          GameState.equipHeroToSlot(slotIdx, { ...hero, hp: 100, attack: hero.rarity === 'legendary' ? 20 : hero.rarity === 'epic' ? 15 : 10, defense: 5 });
+          SaveManager.save();
+        }
+        overlay.remove();
+        this._renderContent(container);
+      };
+    });
+  }
+
+  _showPetInfo(container) {
+    const pet = GameState.petSlot;
+    if (!pet) {
+      showToast('🐾 펫이 없습니다! 펫 진화 탭에서 진화시키세요');
+      return;
+    }
+    showToast(`🐾 ${pet.emoji} ${pet.name} (${pet.rarity || 'common'}) — 5초마다 HP 회복`);
+  }
+
+  _autoAssignParty(container) {
+    const currentStage = GameState.currentStage || 1;
+    const playerLevel = GameState.heroLevel || 1;
+
+    // 등급 우선순위로 정렬
+    const rarityOrder = { legendary: 5, epic: 4, magic: 3, rare: 2, common: 1 };
+    const sorted = [...HERO_ROSTER].sort((a, b) => (rarityOrder[b.rarity] || 0) - (rarityOrder[a.rarity] || 0));
+
+    // 메인 영웅 제외하고 편성 가능한 순서대로 슬롯 채우기
+    const nonMain = sorted.filter(h => !h.isMainHero);
+
+    for (let i = 0; i < 5; i++) {
+      if (!isSlotUnlocked(i, currentStage, playerLevel)) continue;
+      if (GameState.heroSlots[i]) continue; // 이미 채워진 슬롯 스킵
+
+      const equipped = GameState.heroSlots.filter(h => h != null);
+      for (const hero of nonMain) {
+        // 이미 장착된 영웅인지 체크
+        if (equipped.some(h => h.key === hero.key)) continue;
+        const check = canEquipHero(hero, equipped);
+        if (check.allowed) {
+          GameState.equipHeroToSlot(i, { ...hero, hp: 100, attack: hero.rarity === 'legendary' ? 20 : hero.rarity === 'epic' ? 15 : 10, defense: 5 });
+          break;
+        }
+      }
+    }
+
+    SaveManager.save();
+    showToast('✨ 파티 자동 편성 완료!');
+    this._renderContent(container);
   }
 
   // ── HeroAI 파티 동기화 (출발 시 호출) ──
