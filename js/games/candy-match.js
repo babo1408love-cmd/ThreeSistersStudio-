@@ -1428,11 +1428,10 @@ export default class CandyMatch {
   }
 
   _findMatches() {
-    // Phase 1: 가로/세로 런(run) 탐색
-    const rawRuns = [];
+    const matchGroups = [];
     const allMatched = {};
 
-    // Horizontal runs
+    // Horizontal — 각 가로 런 = 개별 매치
     for (let r = 0; r < this.rows; r++) {
       let c = 0;
       while (c < this.cols) {
@@ -1440,16 +1439,17 @@ export default class CandyMatch {
         if (gem < 0) { c++; continue; }
         let end = c + 1;
         while (end < this.cols && this._gemAt(r, end) === gem) end++;
-        if (end - c >= 3) {
-          const cells = [];
-          for (let i = c; i < end; i++) { cells.push([r, i]); allMatched[r + ',' + i] = true; }
-          rawRuns.push({ type: 'h', cells, gem });
+        const len = end - c;
+        if (len >= 3) {
+          const group = [];
+          for (let i = c; i < end; i++) { group.push([r, i]); allMatched[r + ',' + i] = true; }
+          matchGroups.push({ type: 'h', len, cells: group, gem });
         }
         c = end;
       }
     }
 
-    // Vertical runs
+    // Vertical — 각 세로 런 = 개별 매치
     for (let c = 0; c < this.cols; c++) {
       let r = 0;
       while (r < this.rows) {
@@ -1457,80 +1457,14 @@ export default class CandyMatch {
         if (gem < 0) { r++; continue; }
         let end = r + 1;
         while (end < this.rows && this._gemAt(end, c) === gem) end++;
-        if (end - r >= 3) {
-          const cells = [];
-          for (let i = r; i < end; i++) { cells.push([i, c]); allMatched[i + ',' + c] = true; }
-          rawRuns.push({ type: 'v', cells, gem });
+        const len = end - r;
+        if (len >= 3) {
+          const group = [];
+          for (let i = r; i < end; i++) { group.push([i, c]); allMatched[i + ',' + c] = true; }
+          matchGroups.push({ type: 'v', len, cells: group, gem });
         }
         r = end;
       }
-    }
-
-    // Phase 2: 같은 젬의 런을 연결 요소(connected component)로 병합
-    // 셀이 겹치는 런끼리 합침 → 각 연결 그룹이 하나의 매치
-    const parent = new Map(); // key → key (Union-Find)
-    const keyToGem = new Map();
-
-    const find = (k) => {
-      while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); }
-      return k;
-    };
-    const union = (a, b) => {
-      a = find(a); b = find(b);
-      if (a !== b) parent.set(a, b);
-    };
-
-    // 모든 매치 셀을 Union-Find에 등록
-    for (const run of rawRuns) {
-      const keys = run.cells.map(([r, c]) => r + ',' + c);
-      for (const k of keys) {
-        if (!parent.has(k)) parent.set(k, k);
-        keyToGem.set(k, run.gem);
-      }
-      // 같은 런 내 셀끼리 연결
-      for (let i = 1; i < keys.length; i++) union(keys[0], keys[i]);
-    }
-
-    // 같은 젬의 런끼리 공유 셀이 있으면 연결
-    const cellToRuns = new Map();
-    for (let ri = 0; ri < rawRuns.length; ri++) {
-      for (const [r, c] of rawRuns[ri].cells) {
-        const k = r + ',' + c;
-        if (!cellToRuns.has(k)) cellToRuns.set(k, []);
-        cellToRuns.get(k).push(ri);
-      }
-    }
-    for (const [, runIdxs] of cellToRuns) {
-      if (runIdxs.length > 1) {
-        // 같은 셀을 공유하는 런들의 첫 셀끼리 union
-        const baseKey = rawRuns[runIdxs[0]].cells[0][0] + ',' + rawRuns[runIdxs[0]].cells[0][1];
-        for (let i = 1; i < runIdxs.length; i++) {
-          const otherKey = rawRuns[runIdxs[i]].cells[0][0] + ',' + rawRuns[runIdxs[i]].cells[0][1];
-          if (rawRuns[runIdxs[0]].gem === rawRuns[runIdxs[i]].gem) {
-            union(baseKey, otherKey);
-          }
-        }
-      }
-    }
-
-    // Phase 3: 그룹별 셀 수집
-    const groups = new Map(); // rootKey → Set of keys
-    for (const [k] of parent) {
-      const root = find(k);
-      if (!groups.has(root)) groups.set(root, new Set());
-      groups.get(root).add(k);
-    }
-
-    // Phase 4: matchGroups 생성 (각 연결 요소 = 1개 매치)
-    const matchGroups = [];
-    for (const [, cellKeys] of groups) {
-      const cells = [...cellKeys].map(k => k.split(',').map(Number));
-      const gem = keyToGem.get([...cellKeys][0]);
-      // 연결 그룹 내 가로/세로 판정
-      const hasH = rawRuns.some(run => run.gem === gem && run.type === 'h' && run.cells.some(([r, c]) => cellKeys.has(r + ',' + c)));
-      const hasV = rawRuns.some(run => run.gem === gem && run.type === 'v' && run.cells.some(([r, c]) => cellKeys.has(r + ',' + c)));
-      const type = hasH && hasV ? 'cross' : hasH ? 'h' : 'v';
-      matchGroups.push({ type, len: cells.length, cells, gem });
     }
 
     return { matchGroups, matchedKeys: Object.keys(allMatched), allMatched };
@@ -1606,7 +1540,8 @@ export default class CandyMatch {
       chainCount++;
       totalMatchedCells += matchedKeys.length;
       if (this._helperActive) this._tilesDestroyed += matchedKeys.length;
-      this.comboCount++;
+      // 매치된 타일 수만큼 콤보 증가 (3매치+4매치=7콤보)
+      this.comboCount += matchedKeys.length;
 
       // 매치 그룹 수만큼 매치 카운트 증가 + 조각 진행
       this._matchCount += matchGroups.length;
