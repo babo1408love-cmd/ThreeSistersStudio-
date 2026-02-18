@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**몽글벨 (Monglebel)** — A hybrid 2.5D stage-based game combining Candy Match (match-3), Marble Shooting (tap-to-pop), Treasure Events, Spirit Summoning (gacha), and Last War-style Survival Combat.
+**몽글벨 (Monglebel)** — A hybrid 2.5D stage-based game combining Candy Match (match-3), Marble Shooting (tap-to-pop), Treasure Events, Spirit Summoning (gacha), and Side-Scroll Survival Combat.
 
 ## Architecture
 
