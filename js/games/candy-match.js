@@ -1545,13 +1545,7 @@ export default class CandyMatch {
       // 매치 그룹 수만큼 매치 카운트 증가 + 조각 진행
       this._matchCount += matchGroups.length;
 
-      // ★ 클리어 달성 시 즉시 루프 종료 (강제 클리어)
-      if (this._checkCleared()) {
-        if (typeof SoundSFX !== 'undefined' && SoundSFX.candyClear) SoundSFX.candyClear();
-        this.comboCount = 0;
-        return;
-      }
-
+      // ★ 조각 진행을 클리어 체크보다 먼저 처리 (드롭 소실 방지)
       for (let mg = 0; mg < matchGroups.length; mg++) {
         this._fragmentProgress++;
         if (this._fragmentProgress >= 6) {
@@ -1575,6 +1569,13 @@ export default class CandyMatch {
         }
       }
       this.totalCombo = Math.max(this.totalCombo, this.comboCount);
+
+      // ★ 클리어 달성 시 루프 종료 (조각 진행 완료 후)
+      if (this._checkCleared()) {
+        if (typeof SoundSFX !== 'undefined' && SoundSFX.candyClear) SoundSFX.candyClear();
+        this.comboCount = 0;
+        return;
+      }
 
       // Track which gem types were matched (for spirit item generation)
       for (const group of matchGroups) {
@@ -1635,17 +1636,15 @@ export default class CandyMatch {
       const matchedSet = new Set(matchedKeys);
       this._updateBoardDOM({ exploding: matchedSet });
       showScoreFloat(totalPoints);
-      // 매치/콤보 효과음
+      // 매치/콤보 효과음 (콤보마다 2반음 상승 + 화려해짐)
       if (typeof SoundSFX !== 'undefined') {
+        if (SoundSFX.candyMatch) SoundSFX.candyMatch(this.comboCount);
         if (this.comboCount >= 3 && SoundSFX.candyCombo) SoundSFX.candyCombo(this.comboCount);
-        else if (SoundSFX.candyMatch) SoundSFX.candyMatch(this.comboCount);
       }
-      if (comboBonusInfo && this.comboCount >= 3) {
-        showComboText(`${comboBonusInfo.label}`);
-      } else if (this.comboCount >= 2) {
-        showComboText('✨ ' + this.comboCount + 'x 콤보!');
+      // 🎆 콤보 시각 이펙트 (2콤보부터, 콤보 높을수록 화려)
+      if (this.comboCount >= 2) {
+        this._showComboEffect(this.comboCount);
       }
-      if (bonusText) showComboText('💥 ' + bonusText);
 
       // --- 매치 단계 연출 (tier 2+) ---
       if (bestTier && bestTier.tier >= 2) {
@@ -2453,6 +2452,84 @@ export default class CandyMatch {
       flash.style.background = `radial-gradient(circle, ${tier.color}40, ${tier.color}00 70%)`;
       document.body.appendChild(flash);
       setTimeout(() => flash.remove(), 500);
+    }
+  }
+
+  // 🎆 콤보 시각 이펙트 — 콤보가 높을수록 화려해짐
+  _showComboEffect(combo) {
+    if (this._destroyed) return;
+    const wrapper = this.container.querySelector('#candy-board-wrapper');
+    if (!wrapper) return;
+    const rect = wrapper.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    // ── 레벨 결정 ──
+    // 2-3: Lv1, 4-5: Lv2, 6-7: Lv3, 8+: Lv4
+    const lv = combo >= 8 ? 4 : combo >= 6 ? 3 : combo >= 4 ? 2 : 1;
+
+    // ── 색상 (콤보 레벨별) ──
+    const colors = ['#86efac', '#67e8f9', '#a78bfa', '#fbbf24'];
+    const color = colors[lv - 1];
+
+    // ── 보드 글로우 (Lv1+) ──
+    const glowIntensity = Math.min(20 + lv * 10, 50);
+    wrapper.style.boxShadow = `0 0 ${glowIntensity}px ${glowIntensity / 2}px ${color}`;
+    setTimeout(() => { wrapper.style.boxShadow = ''; }, 300 + lv * 100);
+
+    // ── 흔들림 (Lv2+) ──
+    if (lv >= 2) {
+      const intensity = lv * 2;
+      wrapper.style.animation = `comboShake ${0.1 + 0.05 * lv}s ease ${Math.ceil(lv * 1.5)}`;
+      wrapper.style.setProperty('--shake-px', intensity + 'px');
+      setTimeout(() => { wrapper.style.animation = ''; }, 200 + lv * 100);
+    }
+
+    // ── 파티클 폭발 (Lv1+, 개수 증가) ──
+    const particleCount = 3 + lv * 3;
+    const emojis = ['✨', '⭐', '💫', '🌟', '💥', '🔥', '🌈', '👼'];
+    const useEmojis = emojis.slice(0, lv * 2);
+    for (let i = 0; i < particleCount; i++) {
+      const p = document.createElement('div');
+      p.className = 'combo-particle';
+      p.textContent = useEmojis[i % useEmojis.length];
+      p.style.left = cx + 'px';
+      p.style.top = cy + 'px';
+      p.style.fontSize = (10 + lv * 3) + 'px';
+      const angle = (i / particleCount) * Math.PI * 2 + Math.random() * 0.5;
+      const dist = 50 + lv * 20 + Math.random() * 40;
+      p.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+      p.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+      p.style.animationDelay = (i * 20) + 'ms';
+      p.style.animationDuration = (400 + lv * 100) + 'ms';
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 600 + lv * 150);
+    }
+
+    // ── 화면 플래시 (Lv3+) ──
+    if (lv >= 3) {
+      const flash = document.createElement('div');
+      flash.className = 'combo-flash';
+      const alpha = lv >= 4 ? '50' : '30';
+      flash.style.background = lv >= 4
+        ? `radial-gradient(circle, #fbbf24${alpha}, #f472b6${alpha}, transparent 70%)`
+        : `radial-gradient(circle, ${color}${alpha}, transparent 70%)`;
+      document.body.appendChild(flash);
+      setTimeout(() => flash.remove(), 400 + lv * 50);
+    }
+
+    // ── 콤보 숫자 표시 (Lv2+) ──
+    if (lv >= 2) {
+      const num = document.createElement('div');
+      num.className = 'combo-number';
+      num.textContent = combo + 'x';
+      num.style.left = cx + 'px';
+      num.style.top = cy + 'px';
+      num.style.fontSize = (24 + lv * 6) + 'px';
+      num.style.color = color;
+      num.style.textShadow = `0 0 ${lv * 4}px ${color}, 0 2px 4px rgba(0,0,0,0.5)`;
+      document.body.appendChild(num);
+      setTimeout(() => num.remove(), 800 + lv * 100);
     }
   }
 

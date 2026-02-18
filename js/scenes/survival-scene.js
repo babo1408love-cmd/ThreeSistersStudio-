@@ -17,6 +17,7 @@ import AutoScroll from '../systems/auto-scroll.js';
 import BossApproachSystem from '../systems/boss-approach.js';
 import AutoWalk from '../systems/auto-walk.js';
 import RageSystem from '../systems/rage-system.js';
+import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
 
 // ── 서바이벌 맵 10종 ──
 const SURVIVAL_BIOMES = [
@@ -407,13 +408,22 @@ class SurvivalEngine {
         continue;
       }
 
-      // AI: 플레이어 추격
+      // AI: 플레이어 추격 — 근접 시스템 적용
       e.bobPhase += dt * 0.003;
       const dx = this.player.x - e.x;
       const dy = this.player.y - e.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist > 1) {
-        const spd = e.speed * (dt / 16);
+
+      // 워프: 너무 멀면 플레이어 근처로 순간이동
+      const warpCfg = ENEMY_SPEED_CONFIG;
+      if (dist > warpCfg.warpDistance) {
+        const angle = Math.atan2(dy, dx) + Math.PI;
+        const warpDist = warpCfg.warpMinDist + Math.random() * (warpCfg.warpMaxDist - warpCfg.warpMinDist);
+        e.x = this.player.x + Math.cos(angle) * warpDist;
+        e.y = this.player.y + Math.sin(angle) * warpDist;
+      } else if (dist > 1) {
+        // 근접 시스템: 원거리=주인공보다 빠름, 근거리=같은 속도
+        const spd = calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
         e.x += (dx / dist) * spd;
         e.y += (dy / dist) * spd;
       }

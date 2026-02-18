@@ -328,6 +328,32 @@ export const ENEMY_MOVEMENT_TYPE = {
            'boss_infected_elder', 'boss_lake_corruption'],
 };
 
+// ====================================================
+// 몬스터 속도 근접 시스템 (Enemy Speed Proximity)
+// 원거리: 주인공보다 약간 빠름 → 근거리: 주인공과 같은 속도
+// ====================================================
+export const ENEMY_SPEED_CONFIG = {
+  // 원거리 속도 배율 (플레이어 속도 대비)
+  farSpeedMultiplier: 1.15,       // 15% 빠름
+  // 근거리 속도 배율 (플레이어 속도 대비)
+  nearSpeedMultiplier: 1.0,       // 같은 속도
+  // 근접 판정 거리 (px) — 이 이내면 nearSpeed 적용
+  proximityRadius: 80,
+  // 원거리 판정 거리 (px) — 이 이상이면 farSpeed 적용
+  farRadius: 300,
+  // 보스 전용 오버라이드
+  boss: {
+    farSpeedMultiplier: 1.05,     // 보스는 5%만 빠르게 (크고 느린 느낌)
+    nearSpeedMultiplier: 0.85,    // 근접 시 살짝 느림 (회피 가능)
+    proximityRadius: 60,
+    farRadius: 350,
+  },
+  // 워프 거리 (이 이상이면 플레이어 근처로 순간이동)
+  warpDistance: 600,
+  warpMinDist: 250,
+  warpMaxDist: 400,
+};
+
 // --- 전투 완료 후 ---
 // 1. 적 요정(보스) 처치
 // 2. 아이템 수집 화면 연출 (아이템들이 화면 중앙으로 날아옴)
@@ -342,3 +368,24 @@ export const VICTORY_SEQUENCE = {
   // 수집 연출: 아이템이 중앙으로 모이는 애니메이션
   collectAnimation: 'fly-to-center',
 };
+
+// --- 몬스터 속도 계산 유틸리티 ---
+// 거리에 따라 보간된 속도 반환 (px/frame @60fps)
+export function calcEnemySpeed(dist, playerSpeed, isBoss = false) {
+  const cfg = isBoss ? ENEMY_SPEED_CONFIG.boss : ENEMY_SPEED_CONFIG;
+  const farR = cfg.farRadius;
+  const nearR = cfg.proximityRadius;
+  const farMul = cfg.farSpeedMultiplier;
+  const nearMul = cfg.nearSpeedMultiplier;
+
+  let t; // 0=near, 1=far
+  if (dist <= nearR) {
+    t = 0;
+  } else if (dist >= farR) {
+    t = 1;
+  } else {
+    t = (dist - nearR) / (farR - nearR);
+  }
+  const multiplier = nearMul + (farMul - nearMul) * t;
+  return playerSpeed * multiplier;
+}

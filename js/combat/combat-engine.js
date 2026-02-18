@@ -15,6 +15,7 @@ import AutoScroll from '../systems/auto-scroll.js';
 import BossApproachSystem from '../systems/boss-approach.js';
 import AutoWalk from '../systems/auto-walk.js';
 import RageSystem from '../systems/rage-system.js';
+import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
 
 // ── 업그레이드 아이템 정의 ──
 const UPGRADE_ITEMS = [
@@ -537,17 +538,16 @@ export default class CombatEngine {
       const dy = this.player.y - e.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // 너무 멀면(600px+) 플레이어 근처로 워프 (화면 밖 적 방지)
-      if (dist > 600) {
-        const angle = Math.atan2(dy, dx) + Math.PI; // 플레이어 반대편
-        const warpDist = 250 + Math.random() * 150;
+      // 너무 멀면 플레이어 근처로 워프 (화면 밖 적 방지)
+      const warpCfg = ENEMY_SPEED_CONFIG;
+      if (dist > warpCfg.warpDistance) {
+        const angle = Math.atan2(dy, dx) + Math.PI;
+        const warpDist = warpCfg.warpMinDist + Math.random() * (warpCfg.warpMaxDist - warpCfg.warpMinDist);
         e.x = this.player.x + Math.cos(angle) * warpDist;
         e.y = this.player.y + Math.sin(angle) * warpDist;
       } else if (dist > e.radius + this.player.radius) {
-        // 보스는 플레이어 속도의 70%, 일반은 90%까지 따라잡음
-        const baseSpd = e.speed || 1;
-        const minSpd = e.isBoss ? this.player.speed * 0.7 : this.player.speed * 0.5;
-        const spd = Math.max(baseSpd, minSpd) * (dt / 16);
+        // 근접 시스템: 원거리=주인공보다 빠름, 근거리=같은 속도
+        const spd = calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
         e.x += (dx / dist) * spd;
         e.y += (dy / dist) * spd;
       }

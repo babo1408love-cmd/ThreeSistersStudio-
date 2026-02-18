@@ -81,18 +81,51 @@ const SoundSFX = {
   },
 
   candyCombo(comboCount) {
-    this.candyMatch(comboCount);
     const SE = SoundEngine;
+    if (!SE.ctx) return;
+    SE.resume();
     const t = SE.ctx.currentTime;
-    if (comboCount >= 5) {
-      // 5콤보 이상: 화려한 아르페지오
-      const notes = ['C5', 'E5', 'G5', 'C6'];
-      notes.forEach((note, i) => {
-        const noteChar = note.slice(0, -1);
-        const oct = parseInt(note.slice(-1));
-        const freq = SE._noteToFreq(noteChar, oct);
-        const { osc, env } = SE._osc('sine', freq, t + i * 0.06, 0.3, SE.sfxGain);
-        SE._adsr(env.gain, t + i * 0.06, 0.01, 0.05, 0.4, 0.1, 0.12, 0.3);
+    const combo = comboCount || 3;
+
+    // 콤보 레벨별 코드 (2반음씩 상승하는 화음)
+    const baseNote = 60 + combo * 2; // MIDI C4 + 콤보×2반음
+    const freq = 440 * Math.pow(2, (baseNote - 69) / 12);
+
+    // Lv1 (3-4콤보): 3도 화음 추가
+    const third = freq * Math.pow(2, 4 / 12); // 장3도
+    const { osc: o3, env: e3 } = SE._osc('sine', third, t + 0.02, 0.2, SE.sfxGain);
+    SE._adsr(e3.gain, t + 0.02, 0.01, 0.05, 0.3, 0.08, 0.12, 0.2);
+
+    // Lv2 (5-6콤보): 5도 화음 + 아르페지오
+    if (combo >= 5) {
+      const fifth = freq * Math.pow(2, 7 / 12); // 완전5도
+      const { osc: o5, env: e5 } = SE._osc('triangle', fifth, t + 0.04, 0.18, SE.sfxGain);
+      SE._adsr(e5.gain, t + 0.04, 0.01, 0.05, 0.25, 0.08, 0.1, 0.18);
+      // 상승 아르페지오
+      [0, 4, 7, 12].forEach((semi, i) => {
+        const nf = freq * Math.pow(2, semi / 12);
+        const { osc, env } = SE._osc('sine', nf, t + 0.06 + i * 0.05, 0.22, SE.sfxGain);
+        SE._adsr(env.gain, t + 0.06 + i * 0.05, 0.01, 0.04, 0.3, 0.08, 0.1, 0.22);
+      });
+    }
+
+    // Lv3 (7-8콤보): 풀 코드 + 옥타브 스윕
+    if (combo >= 7) {
+      const octave = freq * 2;
+      const { osc: oH, env: eH } = SE._osc('sine', octave, t + 0.08, 0.25, SE.sfxGain);
+      SE._adsr(eH.gain, t + 0.08, 0.01, 0.06, 0.4, 0.1, 0.15, 0.25);
+      // 하강 글리산도
+      const { osc: gl, env: gE } = SE._osc('sine', octave * 1.5, t + 0.1, 0.15, SE.sfxGain);
+      gl.frequency.exponentialRampToValueAtTime(octave * 0.8, t + 0.35);
+      SE._adsr(gE.gain, t + 0.1, 0.01, 0.05, 0.2, 0.06, 0.1, 0.15);
+    }
+
+    // Lv4 (9+콤보): 팡파르 + 심벌
+    if (combo >= 9) {
+      [0, 3, 7, 12, 15, 19, 24].forEach((semi, i) => {
+        const nf = freq * Math.pow(2, semi / 12);
+        const { osc, env } = SE._osc('sine', nf, t + 0.1 + i * 0.04, 0.2, SE.sfxGain);
+        SE._adsr(env.gain, t + 0.1 + i * 0.04, 0.005, 0.03, 0.25, 0.06, 0.08, 0.2);
       });
     }
   },
