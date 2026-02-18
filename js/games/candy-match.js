@@ -1652,9 +1652,9 @@ export default class CandyMatch {
         if (this._helperActive) this._helperMsg = MOTHER_OF_WORLD.dialogues.bigMatch;
       }
 
-      // 콤보 속도 계수 — 콤보 높을수록 연출 대기 단축
-      const cSpd = Math.max(0.15, 0.7 - (this.comboCount - 1) * 0.08);
-      await this._wait(Math.round((bestTier && bestTier.tier >= 3 ? 550 : 420) * cSpd));
+      // 콤보 속도 계수 — 1콤보=느긋, 콤보 쌓일수록 점점 빨라짐 (정지 없음)
+      const cSpd = Math.max(0.15, 1.2 - (this.comboCount - 1) * 0.1);
+      await this._wait(Math.round((bestTier && bestTier.tier >= 3 ? 650 : 520) * cSpd));
 
       // --- 매치 시 정령 파츠 드랍 (표시만, 캔디 진행 안 멈춤) ---
       if (bestTier && MATCH_SPIRIT_DROP.enabled) {
@@ -1688,7 +1688,7 @@ export default class CandyMatch {
         this._updateBoardDOM({ exploding: triggeredExtra });
         this.score += triggeredExtra.size * 20;
         showScoreFloat(triggeredExtra.size * 20);
-        await this._wait(Math.round(389 * cSpd));
+        await this._wait(Math.round(480 * cSpd));
         if (this._destroyed) return;
       }
 
@@ -1706,14 +1706,14 @@ export default class CandyMatch {
           this._updateBoardDOM({ exploding: purgeExtra });
           this.score += purgeExtra.size * 15;
           showScoreFloat(purgeExtra.size * 15);
-          await this._wait(Math.round(556 * cSpd));
+          await this._wait(Math.round(660 * cSpd));
           if (this._destroyed) return;
         }
       }
 
       // --- Phase 1.5d: Clear exploded cells visually ---
       this._updateBoardDOM({ cleared: matchedSet });
-      await this._wait(Math.round(111 * cSpd));
+      await this._wait(Math.round(160 * cSpd));
 
       if (this._destroyed) return;
 
@@ -1725,7 +1725,7 @@ export default class CandyMatch {
         falling: new Set(fallenCells),
         newTile: new Set(newCells)
       });
-      await this._wait(Math.round(389 * cSpd));
+      await this._wait(Math.round(480 * cSpd));
 
       if (this._destroyed) return;
     }
@@ -2470,8 +2470,8 @@ export default class CandyMatch {
     // 2-3: Lv1, 4-5: Lv2, 6-7: Lv3, 8+: Lv4
     const lv = combo >= 8 ? 4 : combo >= 6 ? 3 : combo >= 4 ? 2 : 1;
 
-    // ── 속도 계수: 콤보 높을수록 빨라짐 (2콤보=0.7x, 8+콤보=0.15x) ──
-    const speedFactor = Math.max(0.15, 0.7 - (combo - 2) * 0.08);
+    // ── 속도 계수: 1콤보 느긋 → 콤보 쌓일수록 빨라짐 ──
+    const speedFactor = Math.max(0.15, 1.2 - (combo - 1) * 0.1);
 
     // ── 색상 (콤보 레벨별) ──
     const colors = ['#86efac', '#67e8f9', '#a78bfa', '#fbbf24'];
