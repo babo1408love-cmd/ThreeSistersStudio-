@@ -1,79 +1,81 @@
+/* ══════════════════════════════════════
+   Stage 2: Combat Scene
+   ══════════════════════════════════════ */
+
 .combat-scene {
   width: 100%;
   height: 100%;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #0a0f1a;
+  overflow: hidden;
 }
 
 .combat-canvas {
   display: block;
+  flex: 1;
   width: 100%;
-  height: 100%;
   background: #0a0f1a;
+  touch-action: none;
+  cursor: grab;
 }
+.combat-canvas:active { cursor: grabbing; }
 
-.combat-hud {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: var(--gap-sm) var(--gap-md);
+/* ── Control Bar ── */
+.combat-control-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
-  pointer-events: none;
-  z-index: 10;
+  padding: 6px 12px;
+  background: rgba(10, 10, 24, 0.95);
+  border-top: 1px solid var(--border-subtle);
+  gap: 8px;
 }
 
-.combat-hud > * { pointer-events: auto; }
-
-.hp-bar {
-  width: 160px;
-  height: 12px;
-  background: rgba(30, 30, 50, 0.8);
-  border-radius: 6px;
-  overflow: hidden;
+.combat-ctrl-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  min-width: 60px;
+  color: var(--text-primary);
+}
+.combat-ctrl-btn:hover { border-color: var(--pink); }
+.combat-ctrl-btn:active { transform: scale(0.95); }
+
+.combat-ctrl-icon { font-size: 1.2em; }
+.combat-ctrl-label { font-size: 0.65em; color: var(--text-secondary); }
+
+.combat-ctrl-info {
+  flex: 1;
+  text-align: center;
+  font-size: 0.85em;
+  color: var(--text-secondary);
 }
 
-.hp-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--red), var(--orange));
-  border-radius: 6px;
-  transition: width 0.2s;
-}
-
-.hp-fill.healthy { background: linear-gradient(90deg, var(--green), var(--cyan)); }
-.hp-fill.warning { background: linear-gradient(90deg, var(--gold), var(--orange)); }
-
-.combat-wave {
+/* ── Victory Stats ── */
+.victory-stats {
+  margin-top: 12px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
   font-size: 0.9em;
   color: var(--gold);
-  font-weight: 700;
 }
 
-.combat-allies {
-  display: flex;
-  gap: var(--gap-xs);
-}
-
-.combat-ally-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-round);
-  background: var(--bg-card);
-  border: 2px solid var(--purple);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-}
-
-/* Death overlay */
+/* ── Death Overlay ── */
 .death-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -84,16 +86,16 @@
 }
 
 .death-overlay__title {
-  font-size: 2.5em;
-  color: var(--red);
+  font-size: 2.2em;
+  color: var(--green);
   font-weight: 900;
 }
 
-/* Victory overlay */
+/* ── Victory Overlay ── */
 .victory-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.85);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -107,4 +109,129 @@
   font-size: 2.5em;
   color: var(--gold);
   font-weight: 900;
+}
+
+/* ── 소환나무 Overlay ── */
+.summon-tree-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.summon-tree-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  width: 90%;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.summon-tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 1.2em;
+  font-weight: 700;
+  margin-bottom: 16px;
+  color: var(--green);
+}
+
+.summon-tree-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summon-tree-visual {
+  text-align: center;
+  padding: 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.summon-tree-emoji {
+  font-size: 4em;
+  animation: treePulse 3s ease-in-out infinite;
+}
+
+@keyframes treePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); filter: drop-shadow(0 0 10px rgba(134, 239, 172, 0.4)); }
+}
+
+.summon-tree-desc {
+  margin-top: 8px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.summon-tree-spirits {
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.summon-spirit-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+
+.summon-tree-fragments {
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+}
+
+.fragment-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.fragment-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ── HUD (non-canvas) ── */
+.combat-hud {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  padding: var(--gap-sm) var(--gap-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+  pointer-events: none;
+  z-index: 10;
+}
+.combat-hud > * { pointer-events: auto; }
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .combat-control-bar { padding: 4px 8px; }
+  .combat-ctrl-btn { padding: 4px 8px; min-width: 50px; }
+  .combat-ctrl-icon { font-size: 1em; }
+  .summon-tree-panel { padding: 14px; }
+  .fragment-grid { grid-template-columns: repeat(2, 1fr); }
 }

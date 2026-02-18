@@ -1,63 +1,144 @@
-// Combat Engine - Canvas-based requestAnimationFrame loop
+/**
+ * CombatEngine — 스테이지2 Canvas 횡스크롤 전투
+ * 귀여운 슬라임, 자동공격, 업그레이드 드롭, 분노게이지, 펫회복
+ */
 import GameState from '../core/game-state.js';
 import EventBus from '../core/event-bus.js';
-import { Player } from './player.js';
-import { Enemy, ENEMY_TYPES } from './enemy.js';
-import { SpiritAlly } from './spirit-ally.js';
-import { Projectile } from './projectile.js';
-import { checkCollision, checkCircleCollision } from './collision.js';
+import { ENEMIES, BOSSES, generateWave, generateDrop } from '../generators/enemy-drop-generator.js';
+import { generateMap, renderMap } from '../generators/map-generator.js';
+import { renderAttack, getSkillByTier } from '../generators/spirit-attack-generator.js';
+
+// ── 업그레이드 아이템 정의 ──
+const UPGRADE_ITEMS = [
+  {id:'fast_attack',  name:'빠른공격',  emoji:'🔴',color:'#FF4444',desc:'공격속도+20%',  apply:(p)=>{p.atkSpeed*=0.8;}},
+  {id:'strong_attack', name:'강한공격',  emoji:'🟠',color:'#FF8800',desc:'공격크기1.5배',  apply:(p)=>{p.projSize*=1.5;}},
+  {id:'long_range',    name:'먼공격',    emoji:'🟡',color:'#FFDD00',desc:'사거리+30%',    apply:(p)=>{p.projSpeed*=1.3;}},
+  {id:'double_shot',   name:'연속발사',  emoji:'🟢',color:'#44BB44',desc:'2발씩 발사',    apply:(p)=>{p.shotCount=Math.min(p.shotCount+1,4);}},
+  {id:'pierce',        name:'관통공격',  emoji:'🔵',color:'#4488FF',desc:'2마리 관통',    apply:(p)=>{p.pierce=Math.min(p.pierce+1,4);}},
+  {id:'homing',        name:'호밍공격',  emoji:'🟣',color:'#AA44CC',desc:'적 추적',       apply:(p)=>{p.homing=true;}},
+  {id:'hp_heal',       name:'HP회복',    emoji:'⚪',color:'#FFFFFF',desc:'즉시30% 회복',  apply:(p,eng)=>{eng.healPlayer(Math.round(p.maxHp*0.3));}},
+  {id:'def_up',        name:'방어강화',  emoji:'🟤',color:'#8B4513',desc:'방어력+5',      apply:(p)=>{p.defense+=5;}},
+];
 
 export default class CombatEngine {
   constructor(canvas, options = {}) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.width = canvas.width;
-    this.height = canvas.height;
-    this.waves = options.waves || [];
-    this.bossWave = options.bossWave || null;
+    this.W = canvas.width;
+    this.H = canvas.height;
+
+    // Options
+    this.stageLevel = options.stageLevel || 1;
+    this.maxWaves = options.maxWaves || 4;
     this.onVictory = options.onVictory || (() => {});
     this.onDeath = options.onDeath || (() => {});
 
+    // Map
+    this.map = generateMap('fairy_garden', 50, 10);
+    this.camera = { x: 0, y: 0 };
+
+    // Player
+    const ps = GameState.player;
+    this.player = {
+      x: 120, y: this.map.mapH / 2,
+      hp: ps.hp || ps.maxHp, maxHp: ps.maxHp || 200,
+      attack: ps.attack || 10, defense: ps.defense || 5,
+      speed: 2.5,
+      radius: 16,
+      // Combat upgrades
+      atkSpeed: 500, // ms between shots
+      atkTimer: 0,
+      projSize: 5,
+      projSpeed: 5,
+      shotCount: 1,
+      pierce: 0,
+      homing: false,
+      // Visual
+      emoji: GameState.heroAppearance?.emoji || '🧚',
+      bobPhase: 0,
+    };
+
+    // Slot heroes (최대 2)
+    this.slotHeroes = [];
+    const slots = GameState.heroSlots.filter(h => h != null).slice(0, 2);
+    slots.forEach((h, i) => {
+      this.slotHeroes.push({
+        x: this.player.x - 30, y: this.player.y + (i === 0 ? -35 : 35),
+        hp: 80, maxHp: 80, attack: h.attack || 8, defense: 3,
+        radius: 12, atkTimer: 0, atkSpeed: 700,
+        emoji: h.emoji || '🧚', name: h.name || '동료',
+        attribute: h.attribute || 'light',
+      });
+    });
+
+    // Spirits (정령 소환)
+    this.spirits = [];
+    GameState.spirits.forEach((s, i) => {
+      this.spirits.push({
+        x: this.player.x + 30, y: this.player.y + (i % 2 === 0 ? -25 : 25) + i * 10,
+        orbitAngle: (i / Math.max(1, GameState.spirits.length)) * Math.PI * 2,
+        radius: 10,
+        attribute: s.attribute || 'light',
+        rarity: s.rarity || 1,
+        level: s.level || 1,
+        emoji: s.emoji || '✨',
+        name: s.name || '정령',
+        atkTimer: 0,
+        atkCooldown: Math.max(800, 2000 - (s.rarity || 1) * 200),
+        currentSkillFx: null,
+      });
+    });
+
+    // Pet
+    this.pet = null;
+    if (GameState.petSlot) {
+      const p = GameState.petSlot;
+      this.pet = {
+        x: this.player.x - 20, y: this.player.y - 20,
+        emoji: GameState.petAppearance?.emoji || p.emoji || '💚',
+        healTimer: 0,
+        healInterval: 5000,
+        healAmount: (p.rarity ? ({'common':1,'rare':2,'magic':3,'epic':4,'legendary':5}[p.rarity]||1) : 1) * 5,
+      };
+    }
+
     // Entities
-    this.player = null;
     this.enemies = [];
-    this.allies = [];
     this.projectiles = [];
     this.particles = [];
+    this.droppedItems = [];  // floor upgrade items
+    this.activeAttackFx = []; // spirit attack effects
 
     // State
     this.running = false;
-    this.paused = false;
-    this.currentWaveIndex = 0;
+    this.currentWave = 0;
+    this.waveSpawned = false;
     this.waveTimer = 0;
-    this.totalEnemiesSpawned = 0;
-    this.totalEnemiesKilled = 0;
+    this.waveDelay = 3000; // ms between waves
+    this.totalKills = 0;
+    this.totalGold = 0;
     this._animFrame = null;
     this._lastTime = 0;
+    this._elapsed = 0;
     this._keys = {};
+    this._touchStart = null;
     this._touchDir = { x: 0, y: 0 };
-    this._elapsed = 0; // total elapsed ms
 
-    // Input
+    // Rage
+    this.rageGauge = GameState.rageGauge || 0;
+    this.rageActive = false;
+    this.rageTimer = 0;
+
+    // Pet heal gauge
+    this.petHealGauge = GameState.petHealGauge || 0;
+
     this._bindInput();
   }
 
   start() {
-    // Create player
-    const ps = GameState.player;
-    this.player = new Player(this.width / 2, this.height / 2, ps);
-
-    // Create spirit allies
-    GameState.spirits.forEach((spirit, i) => {
-      const angle = (i / Math.max(GameState.spirits.length, 1)) * Math.PI * 2;
-      const ax = this.player.x + Math.cos(angle) * 60;
-      const ay = this.player.y + Math.sin(angle) * 60;
-      this.allies.push(new SpiritAlly(ax, ay, spirit, this));
-    });
-
     this.running = true;
     this._lastTime = performance.now();
-    this._elapsed = 0;
+    this._spawnWave();
     this._loop();
   }
 
@@ -70,148 +151,438 @@ export default class CombatEngine {
   _loop() {
     if (!this.running) return;
     const now = performance.now();
-    const dt = Math.min(now - this._lastTime, 50); // cap delta
+    const dt = Math.min(now - this._lastTime, 50);
     this._lastTime = now;
-
-    if (!this.paused) {
-      this._elapsed += dt;
-      this._update(dt);
-    }
+    this._elapsed += dt;
+    this._update(dt);
     this._draw();
-
     this._animFrame = requestAnimationFrame(() => this._loop());
   }
 
+  // ══════════════════════════════════════
+  //  UPDATE
+  // ══════════════════════════════════════
   _update(dt) {
-    // Spawn waves
-    this._updateWaves();
+    // Wave management
+    this._updateWaves(dt);
+    // Player movement
+    this._updatePlayer(dt);
+    // Slot heroes follow
+    this._updateSlotHeroes(dt);
+    // Spirits orbit
+    this._updateSpirits(dt);
+    // Pet follow + heal
+    this._updatePet(dt);
+    // Auto-attack
+    this._updateAutoAttack(dt);
+    // Enemies
+    this._updateEnemies(dt);
+    // Projectiles
+    this._updateProjectiles(dt);
+    // Attack effects
+    this._updateAttackFx(dt);
+    // Dropped items
+    this._updateDroppedItems();
+    // Particles
+    this._updateParticles(dt);
+    // Rage
+    this._updateRage(dt);
+    // Camera
+    this._updateCamera();
+    // Victory check
+    this._checkVictory();
+  }
 
-    // Update player
-    const moveX = (this._keys['d'] || this._keys['arrowright'] ? 1 : 0) - (this._keys['a'] || this._keys['arrowleft'] ? 1 : 0) + this._touchDir.x;
-    const moveY = (this._keys['s'] || this._keys['arrowdown'] ? 1 : 0) - (this._keys['w'] || this._keys['arrowup'] ? 1 : 0) + this._touchDir.y;
-    this.player.update(dt, moveX, moveY, this.width, this.height);
-
-    // Auto-attack: player fires at nearest enemy
-    this.player.attackTimer -= dt;
-    if (this.player.attackTimer <= 0 && this.enemies.length > 0) {
-      const nearest = this._findNearest(this.player, this.enemies);
-      if (nearest) {
-        const angle = Math.atan2(nearest.y - this.player.y, nearest.x - this.player.x);
-        this.projectiles.push(new Projectile(
-          this.player.x, this.player.y,
-          Math.cos(angle) * 5, Math.sin(angle) * 5,
-          GameState.player.attack, 'player', '⚡'
-        ));
-        this.player.attackTimer = 500; // ms between attacks
+  _updateWaves(dt) {
+    if (this.enemies.length === 0 && this.waveSpawned) {
+      this.waveTimer += dt;
+      if (this.waveTimer >= this.waveDelay) {
+        this.currentWave++;
+        if (this.currentWave <= this.maxWaves) {
+          this._spawnWave();
+        }
       }
     }
+  }
 
-    // Update enemies
-    this.enemies.forEach(e => e.update(dt, this.player, this));
+  _spawnWave() {
+    this.waveSpawned = true;
+    this.waveTimer = 0;
+    const wave = generateWave(this.currentWave, this.stageLevel);
 
-    // Update allies
-    this.allies.forEach(a => a.update(dt, this.player, this.enemies, this));
+    // Spawn enemies around screen edges relative to camera
+    wave.enemies.forEach((eDef, i) => {
+      const side = Math.floor(Math.random() * 3); // top/right/bottom
+      let sx, sy;
+      if (side === 0) { sx = this.camera.x + this.W + 40 + i * 30; sy = this.camera.y + Math.random() * this.H; }
+      else if (side === 1) { sx = this.camera.x + this.W * 0.5 + Math.random() * this.W * 0.5; sy = this.camera.y - 40; }
+      else { sx = this.camera.x + this.W * 0.5 + Math.random() * this.W * 0.5; sy = this.camera.y + this.H + 40; }
 
-    // Update projectiles
-    this.projectiles.forEach(p => p.update(dt));
+      this.enemies.push(this._createEnemy(eDef, sx, sy));
+    });
 
-    // Collision: player projectiles → enemies
+    // Boss
+    if (wave.boss) {
+      const bx = this.camera.x + this.W + 100;
+      const by = this.camera.y + this.H / 2;
+      this.enemies.push(this._createEnemy(wave.boss, bx, by));
+    }
+  }
+
+  _createEnemy(def, x, y) {
+    return {
+      x, y,
+      hp: def.hp || def.maxHp || 50,
+      maxHp: def.maxHp || def.hp || 50,
+      attack: def.atk || 5,
+      defense: def.def || 2,
+      speed: def.spd || 1,
+      gold: def.gold || 5,
+      radius: (def.isBoss ? (def.scale || 3) : 1) * 14,
+      emoji: def.emoji || '🩷',
+      color: def.color || '#FF69B4',
+      isBoss: def.isBoss || false,
+      scale: def.scale || 1,
+      rarity: def.rarity || 'common',
+      contactTimer: 0,
+      bobPhase: Math.random() * Math.PI * 2,
+      // Bounce animation
+      bounceY: 0,
+      bounceSpeed: 2 + Math.random() * 2,
+    };
+  }
+
+  _updatePlayer(dt) {
+    let mx = (this._keys['d'] || this._keys['arrowright'] ? 1 : 0) - (this._keys['a'] || this._keys['arrowleft'] ? 1 : 0) + this._touchDir.x;
+    let my = (this._keys['s'] || this._keys['arrowdown'] ? 1 : 0) - (this._keys['w'] || this._keys['arrowup'] ? 1 : 0) + this._touchDir.y;
+    const mag = Math.sqrt(mx * mx + my * my);
+    if (mag > 1) { mx /= mag; my /= mag; }
+
+    const spd = this.player.speed * (dt / 16);
+    this.player.x += mx * spd;
+    this.player.y += my * spd;
+
+    // Clamp to map bounds
+    this.player.x = Math.max(16, Math.min(this.map.mapW - 16, this.player.x));
+    this.player.y = Math.max(16, Math.min(this.map.mapH - 16, this.player.y));
+
+    // Bob animation
+    this.player.bobPhase += dt * 0.004;
+  }
+
+  _updateSlotHeroes(dt) {
+    this.slotHeroes.forEach((h, i) => {
+      const targetX = this.player.x - 30;
+      const targetY = this.player.y + (i === 0 ? -35 : 35);
+      h.x += (targetX - h.x) * 0.08;
+      h.y += (targetY - h.y) * 0.08;
+
+      // Auto-attack
+      h.atkTimer -= dt;
+      if (h.atkTimer <= 0 && this.enemies.length > 0) {
+        const nearest = this._findNearest(h, this.enemies);
+        if (nearest && this._dist(h, nearest) < 250) {
+          const angle = Math.atan2(nearest.y - h.y, nearest.x - h.x);
+          this.projectiles.push({
+            x: h.x, y: h.y,
+            vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
+            damage: h.attack, source: 'ally', radius: 4,
+            emoji: '⚡', pierce: 0, homing: false, target: null,
+          });
+          h.atkTimer = h.atkSpeed;
+        }
+      }
+    });
+  }
+
+  _updateSpirits(dt) {
+    this.spirits.forEach(s => {
+      // Orbit around player
+      s.orbitAngle += dt * 0.0015;
+      const orbitR = 50;
+      s.x = this.player.x + Math.cos(s.orbitAngle) * orbitR;
+      s.y = this.player.y + Math.sin(s.orbitAngle) * orbitR;
+
+      // Spirit auto-attack (속성별 이펙트)
+      s.atkTimer -= dt;
+      if (s.atkTimer <= 0 && this.enemies.length > 0) {
+        const nearest = this._findNearest(s, this.enemies);
+        if (nearest && this._dist(s, nearest) < 300) {
+          const skill = getSkillByTier(s.attribute, Math.min(3, Math.ceil(s.level / 4)));
+          if (skill) {
+            const dmg = Math.round(skill.dmg * (1 + s.rarity * 0.3));
+            // Create attack effect
+            this.activeAttackFx.push({
+              skill,
+              origin: { x: s.x, y: s.y },
+              target: { x: nearest.x, y: nearest.y },
+              progress: 0,
+              duration: 500,
+              damage: dmg,
+              targetEnemy: nearest,
+              hit: false,
+            });
+            s.atkTimer = s.atkCooldown;
+          }
+        }
+      }
+    });
+  }
+
+  _updatePet(dt) {
+    if (!this.pet) return;
+    // Follow behind player
+    const tx = this.player.x - 25;
+    const ty = this.player.y - 25;
+    this.pet.x += (tx - this.pet.x) * 0.06;
+    this.pet.y += (ty - this.pet.y) * 0.06;
+
+    // Auto-heal every 5s
+    this.pet.healTimer += dt;
+    if (this.pet.healTimer >= this.pet.healInterval) {
+      this.pet.healTimer = 0;
+      if (this.player.hp < this.player.maxHp) {
+        const heal = this.pet.healAmount;
+        this.healPlayer(heal);
+        // Green +HP effect
+        this.particles.push({
+          x: this.player.x, y: this.player.y - 20,
+          text: `+${heal}`, color: '#86efac', type: 'text',
+          life: 1200, vy: -0.5, vx: 0,
+        });
+        // Green sparkles
+        for (let i = 0; i < 4; i++) {
+          this.particles.push({
+            x: this.player.x + (Math.random() - 0.5) * 20,
+            y: this.player.y + (Math.random() - 0.5) * 20,
+            vx: (Math.random() - 0.5) * 1, vy: -Math.random() * 1.5,
+            life: 600, color: '#86efac', size: 3, type: 'circle',
+          });
+        }
+      }
+    }
+  }
+
+  _updateAutoAttack(dt) {
+    this.player.atkTimer -= dt;
+    if (this.player.atkTimer <= 0 && this.enemies.length > 0) {
+      const nearest = this._findNearest(this.player, this.enemies);
+      if (nearest) {
+        for (let i = 0; i < this.player.shotCount; i++) {
+          const spread = (i - (this.player.shotCount - 1) / 2) * 0.15;
+          const angle = Math.atan2(nearest.y - this.player.y, nearest.x - this.player.x) + spread;
+          this.projectiles.push({
+            x: this.player.x, y: this.player.y,
+            vx: Math.cos(angle) * this.player.projSpeed,
+            vy: Math.sin(angle) * this.player.projSpeed,
+            damage: this.rageActive ? this.player.attack * 2 : this.player.attack,
+            source: 'player',
+            radius: this.player.projSize,
+            emoji: this.rageActive ? '💢' : '⚡',
+            pierce: this.player.pierce,
+            homing: this.player.homing,
+            target: this.player.homing ? nearest : null,
+          });
+        }
+        this.player.atkTimer = this.player.atkSpeed;
+      }
+    }
+  }
+
+  _updateEnemies(dt) {
+    this.enemies.forEach(e => {
+      // Bounce animation
+      e.bobPhase += dt * 0.005 * e.bounceSpeed;
+      e.bounceY = Math.abs(Math.sin(e.bobPhase)) * 8 * e.scale;
+
+      // Move toward player
+      const dx = this.player.x - e.x;
+      const dy = this.player.y - e.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > e.radius + this.player.radius) {
+        const spd = e.speed * (dt / 16) * 0.8;
+        e.x += (dx / dist) * spd;
+        e.y += (dy / dist) * spd;
+      }
+
+      // Contact damage
+      e.contactTimer -= dt;
+      if (dist < e.radius + this.player.radius && e.contactTimer <= 0) {
+        this._damagePlayer(e.attack);
+        e.contactTimer = 1000;
+      }
+    });
+  }
+
+  _updateProjectiles(dt) {
     this.projectiles = this.projectiles.filter(p => {
+      // Homing
+      if (p.homing && p.target && p.target.hp > 0) {
+        const dx = p.target.x - p.x;
+        const dy = p.target.y - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 1) {
+          const homingStr = 0.08;
+          const angle = Math.atan2(dy, dx);
+          const curAngle = Math.atan2(p.vy, p.vx);
+          const newAngle = curAngle + (angle - curAngle) * homingStr;
+          const spd = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+          p.vx = Math.cos(newAngle) * spd;
+          p.vy = Math.sin(newAngle) * spd;
+        }
+      }
+
+      p.x += p.vx * (dt / 16);
+      p.y += p.vy * (dt / 16);
+
+      // Hit enemies
       if (p.source === 'player' || p.source === 'ally') {
         for (let i = this.enemies.length - 1; i >= 0; i--) {
           const e = this.enemies[i];
-          if (checkCircleCollision(p.x, p.y, 6, e.x, e.y, e.radius)) {
-            e.hp -= p.damage;
-            this._spawnHitParticle(e.x, e.y);
+          if (this._circleHit(p, e)) {
+            const dmg = Math.max(1, p.damage - e.defense * 0.3);
+            e.hp -= dmg;
+            this._spawnHitParticles(e.x, e.y, e.color);
+            // Damage number
+            this.particles.push({
+              x: e.x, y: e.y - e.radius - 5,
+              text: `-${Math.round(dmg)}`, color: '#fbbf24', type: 'text',
+              life: 800, vy: -1, vx: (Math.random() - 0.5) * 0.5,
+            });
             if (e.hp <= 0) {
               this._onEnemyDeath(e);
               this.enemies.splice(i, 1);
             }
+            if (p.pierce > 0) { p.pierce--; continue; }
             return false;
           }
         }
       }
       // Enemy projectiles → player
       if (p.source === 'enemy') {
-        if (checkCircleCollision(p.x, p.y, 6, this.player.x, this.player.y, this.player.radius)) {
+        if (this._circleHit(p, this.player)) {
           this._damagePlayer(p.damage);
           return false;
         }
       }
-      // Out of bounds
-      return p.x > -20 && p.x < this.width + 20 && p.y > -20 && p.y < this.height + 20;
+      // Out of map
+      return p.x > this.camera.x - 50 && p.x < this.camera.x + this.W + 50 &&
+             p.y > this.camera.y - 50 && p.y < this.camera.y + this.H + 50;
     });
+  }
 
-    // Collision: enemies touching player
-    this.enemies.forEach(e => {
-      if (checkCircleCollision(e.x, e.y, e.radius, this.player.x, this.player.y, this.player.radius)) {
-        if (e.contactTimer <= 0) {
-          this._damagePlayer(e.attack);
-          e.contactTimer = 1000;
+  _updateAttackFx(dt) {
+    this.activeAttackFx = this.activeAttackFx.filter(fx => {
+      fx.progress += dt / fx.duration;
+      // Hit at progress 0.5
+      if (!fx.hit && fx.progress >= 0.5 && fx.targetEnemy && fx.targetEnemy.hp > 0) {
+        fx.hit = true;
+        const dmg = Math.max(1, fx.damage - fx.targetEnemy.defense * 0.3);
+        fx.targetEnemy.hp -= dmg;
+        this._spawnHitParticles(fx.targetEnemy.x, fx.targetEnemy.y, fx.targetEnemy.color);
+        this.particles.push({
+          x: fx.targetEnemy.x, y: fx.targetEnemy.y - 15,
+          text: `-${Math.round(dmg)}`, color: '#c084fc', type: 'text',
+          life: 800, vy: -1, vx: 0,
+        });
+        if (fx.targetEnemy.hp <= 0) {
+          const idx = this.enemies.indexOf(fx.targetEnemy);
+          if (idx !== -1) {
+            this._onEnemyDeath(fx.targetEnemy);
+            this.enemies.splice(idx, 1);
+          }
         }
       }
+      return fx.progress < 1;
     });
+  }
 
-    // Update particles
+  _updateDroppedItems() {
+    this.droppedItems = this.droppedItems.filter(item => {
+      // Check player pickup (touch distance)
+      const dx = item.x - this.player.x;
+      const dy = item.y - this.player.y;
+      if (dx * dx + dy * dy < 30 * 30) {
+        // Apply upgrade
+        const upg = UPGRADE_ITEMS.find(u => u.id === item.upgradeId);
+        if (upg) {
+          upg.apply(this.player, this);
+          // Pickup effect
+          this.particles.push({
+            x: this.player.x, y: this.player.y - 30,
+            text: upg.desc, color: upg.color, type: 'text',
+            life: 1500, vy: -0.8, vx: 0,
+          });
+          for (let i = 0; i < 6; i++) {
+            this.particles.push({
+              x: item.x, y: item.y,
+              vx: (Math.random() - 0.5) * 2, vy: -Math.random() * 2,
+              life: 400, color: upg.color, size: 3, type: 'circle',
+            });
+          }
+        }
+        return false;
+      }
+      item.life -= 16;
+      return item.life > 0;
+    });
+  }
+
+  _updateParticles(dt) {
     this.particles = this.particles.filter(p => {
       p.life -= dt;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.05;
+      p.x += (p.vx || 0) * (dt / 16);
+      p.y += (p.vy || 0) * (dt / 16);
+      if (p.type === 'circle') p.vy += 0.03;
       return p.life > 0;
     });
+  }
 
-    // Check victory
-    if (this._allWavesSpawned() && this.enemies.length === 0) {
+  _updateRage(dt) {
+    if (this.rageActive) {
+      this.rageTimer -= dt;
+      if (this.rageTimer <= 0) {
+        this.rageActive = false;
+      }
+    }
+  }
+
+  _updateCamera() {
+    const targetX = this.player.x - this.W * 0.3;
+    const targetY = this.player.y - this.H / 2;
+    this.camera.x += (targetX - this.camera.x) * 0.08;
+    this.camera.y += (targetY - this.camera.y) * 0.08;
+    this.camera.x = Math.max(0, Math.min(this.map.mapW - this.W, this.camera.x));
+    this.camera.y = Math.max(0, Math.min(this.map.mapH - this.H, this.camera.y));
+  }
+
+  _checkVictory() {
+    if (this.currentWave >= this.maxWaves && this.enemies.length === 0 && this.waveSpawned) {
       this.running = false;
+      GameState.player.hp = this.player.hp;
       this.onVictory({
-        enemiesKilled: this.totalEnemiesKilled,
-        hpRemaining: this.player.hp
+        enemiesKilled: this.totalKills,
+        goldEarned: this.totalGold,
+        hpRemaining: this.player.hp,
+        wavesCleared: this.currentWave,
       });
     }
   }
 
-  _updateWaves() {
-    const allWaves = [...this.waves];
-    if (this.bossWave) allWaves.push(this.bossWave);
-
-    for (let i = this.currentWaveIndex; i < allWaves.length; i++) {
-      const wave = allWaves[i];
-      if (this._elapsed >= wave.delay && !wave._spawned) {
-        wave._spawned = true;
-        this.currentWaveIndex = i + 1;
-        wave.enemies.forEach(group => {
-          for (let j = 0; j < group.count; j++) {
-            const type = ENEMY_TYPES[group.type] || ENEMY_TYPES.slime;
-            // Spawn at random edge
-            const side = Math.floor(Math.random() * 4);
-            let sx, sy;
-            if (side === 0) { sx = Math.random() * this.width; sy = -20; }
-            else if (side === 1) { sx = this.width + 20; sy = Math.random() * this.height; }
-            else if (side === 2) { sx = Math.random() * this.width; sy = this.height + 20; }
-            else { sx = -20; sy = Math.random() * this.height; }
-
-            this.enemies.push(new Enemy(sx, sy, type));
-            this.totalEnemiesSpawned++;
-          }
-        });
-      }
-    }
-  }
-
-  _allWavesSpawned() {
-    const allWaves = [...this.waves];
-    if (this.bossWave) allWaves.push(this.bossWave);
-    return allWaves.every(w => w._spawned);
-  }
-
+  // ══════════════════════════════════════
+  //  COMBAT ACTIONS
+  // ══════════════════════════════════════
   _damagePlayer(damage) {
-    const def = GameState.player.defense;
-    const reduced = Math.max(1, damage - def * 0.5);
-    this.player.hp -= reduced;
-    GameState.player.hp = Math.max(0, this.player.hp);
-    this._spawnHitParticle(this.player.x, this.player.y, '#ff6b6b');
-    EventBus.emit('player:damaged', { hp: this.player.hp, maxHp: this.player.maxHp });
+    const dmg = Math.max(1, damage - this.player.defense * 0.5);
+    this.player.hp -= dmg;
+    if (this.player.hp < 0) this.player.hp = 0;
+    GameState.player.hp = this.player.hp;
+    this._spawnHitParticles(this.player.x, this.player.y, '#ff6b6b');
+
+    // Rage charge on damage
+    this._addRage(8);
+    // Pet heal gauge charge
+    this.petHealGauge = Math.min(100, this.petHealGauge + 10);
 
     if (this.player.hp <= 0) {
       this.running = false;
@@ -219,159 +590,487 @@ export default class CombatEngine {
     }
   }
 
+  healPlayer(amount) {
+    this.player.hp = Math.min(this.player.maxHp, this.player.hp + amount);
+    GameState.player.hp = this.player.hp;
+  }
+
   _onEnemyDeath(enemy) {
-    this.totalEnemiesKilled++;
+    this.totalKills++;
     GameState.stats.enemiesDefeated++;
-    // Small gold reward
-    GameState.addGold(enemy.goldDrop || 5);
-    // Purification particles — green/gold sparkles (spirit returns to Summoning Tree)
-    const purifyColors = ['#86efac', '#fbbf24', '#c084fc', '#86efac'];
-    for (let i = 0; i < 8; i++) {
+
+    // Gold
+    const gold = enemy.gold || 5;
+    GameState.addGold(gold);
+    this.totalGold += gold;
+
+    // Gold text
+    this.particles.push({
+      x: enemy.x, y: enemy.y - 10,
+      text: `+${gold}G`, color: '#fbbf24', type: 'text',
+      life: 1000, vy: -1.2, vx: 0,
+    });
+
+    // Death particles (purification sparkles)
+    for (let i = 0; i < 10; i++) {
       this.particles.push({
         x: enemy.x, y: enemy.y,
-        vx: (Math.random() - 0.5) * 3,
-        vy: -Math.random() * 2 - 1, // float upward (returning to tree)
-        life: 600,
-        color: purifyColors[i % purifyColors.length],
-        size: 3 + Math.random() * 3
+        vx: (Math.random() - 0.5) * 3, vy: -Math.random() * 2.5,
+        life: 800, color: i % 2 === 0 ? '#86efac' : '#fbbf24', size: 3 + Math.random() * 2,
+        type: 'circle',
+      });
+    }
+
+    // Rage on kill
+    this._addRage(12);
+    this.petHealGauge = Math.min(100, this.petHealGauge + 4);
+
+    // Drop upgrade item (15% chance, boss guaranteed)
+    if (enemy.isBoss || Math.random() < 0.15) {
+      const upg = UPGRADE_ITEMS[Math.floor(Math.random() * UPGRADE_ITEMS.length)];
+      this.droppedItems.push({
+        x: enemy.x, y: enemy.y,
+        upgradeId: upg.id,
+        emoji: upg.emoji,
+        color: upg.color,
+        life: 10000,
+        bobPhase: 0,
       });
     }
   }
 
-  _spawnHitParticle(x, y, color = '#fbbf24') {
+  _addRage(amount) {
+    if (this.rageActive) return;
+    this.rageGauge = Math.min(100, this.rageGauge + amount);
+    GameState.rageGauge = this.rageGauge;
+
+    if (this.rageGauge >= 100) {
+      this._triggerRage();
+    }
+  }
+
+  _triggerRage() {
+    this.rageActive = true;
+    this.rageGauge = 0;
+    this.rageTimer = 5000; // 5초간 2배 공격력
+    GameState.rageGauge = 0;
+
+    // Screen flash
+    this.particles.push({
+      x: this.player.x, y: this.player.y - 40,
+      text: '💢 분노 폭발! 공격력 2배!', color: '#ff6b6b', type: 'text',
+      life: 2000, vy: -0.5, vx: 0,
+    });
+
+    // AoE damage to all nearby enemies
+    this.enemies.forEach(e => {
+      const dist = this._dist(this.player, e);
+      if (dist < 200) {
+        const dmg = this.player.attack * 3;
+        e.hp -= dmg;
+        this._spawnHitParticles(e.x, e.y, '#ff6b6b');
+        this.particles.push({
+          x: e.x, y: e.y - 15,
+          text: `-${dmg}`, color: '#ff6b6b', type: 'text',
+          life: 800, vy: -1, vx: 0,
+        });
+      }
+    });
+    // Remove dead
+    this.enemies = this.enemies.filter(e => {
+      if (e.hp <= 0) { this._onEnemyDeath(e); return false; }
+      return true;
+    });
+
+    // Shockwave effect
+    for (let i = 0; i < 20; i++) {
+      const angle = (i / 20) * Math.PI * 2;
+      this.particles.push({
+        x: this.player.x, y: this.player.y,
+        vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
+        life: 600, color: '#ff6b6b', size: 4, type: 'circle',
+      });
+    }
+  }
+
+  _spawnHitParticles(x, y, color) {
     for (let i = 0; i < 4; i++) {
       this.particles.push({
         x, y,
         vx: (Math.random() - 0.5) * 2,
         vy: (Math.random() - 0.5) * 2,
-        life: 300,
-        color,
-        size: 2 + Math.random() * 2
+        life: 300, color, size: 2 + Math.random() * 2, type: 'circle',
       });
     }
   }
 
-  _findNearest(from, list) {
-    let nearest = null;
-    let minDist = Infinity;
-    list.forEach(e => {
-      const dx = e.x - from.x;
-      const dy = e.y - from.y;
-      const dist = dx * dx + dy * dy;
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = e;
-      }
-    });
-    return nearest;
-  }
-
-  // Add projectile from ally
-  addProjectile(proj) {
-    this.projectiles.push(proj);
-  }
-
-  // Add particles (for ally abilities)
-  addParticles(arr) {
-    this.particles.push(...arr);
-  }
-
-  // Heal player (from ally ability)
-  healPlayer(amount) {
-    this.player.hp = Math.min(this.player.maxHp, this.player.hp + amount);
-    GameState.player.hp = this.player.hp;
-    EventBus.emit('player:healed', { hp: this.player.hp });
-  }
-
-  // Shield player
-  shieldPlayer(amount) {
-    this.player.shield = (this.player.shield || 0) + amount;
-  }
-
+  // ══════════════════════════════════════
+  //  DRAW
+  // ══════════════════════════════════════
   _draw() {
     const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.width, this.height);
+    const cx = this.camera.x;
+    const cy = this.camera.y;
 
-    // Background
-    ctx.fillStyle = '#0a0f1a';
-    ctx.fillRect(0, 0, this.width, this.height);
+    // Map background
+    renderMap(ctx, this.map, this.camera);
 
-    // Grid lines (subtle)
-    ctx.strokeStyle = 'rgba(50,50,80,0.15)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < this.width; x += 40) {
+    // Dropped items (on ground)
+    this.droppedItems.forEach(item => {
+      item.bobPhase += 0.05;
+      const sx = item.x - cx;
+      const sy = item.y - cy + Math.sin(item.bobPhase) * 3;
+      ctx.font = '20px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // Glow
+      ctx.shadowColor = item.color;
+      ctx.shadowBlur = 8;
+      ctx.fillText(item.emoji, sx, sy);
+      ctx.shadowBlur = 0;
+    });
+
+    // Enemies (draw behind player)
+    this.enemies.forEach(e => this._drawSlime(ctx, e, cx, cy));
+
+    // Spirit attack effects
+    this.activeAttackFx.forEach(fx => {
+      const origin = { x: fx.origin.x - cx, y: fx.origin.y - cy };
+      const target = { x: fx.target.x - cx, y: fx.target.y - cy };
+      renderAttack(ctx, fx.skill, origin, target, fx.progress);
+    });
+
+    // Projectiles
+    this.projectiles.forEach(p => {
+      const sx = p.x - cx;
+      const sy = p.y - cy;
+      ctx.font = `${Math.round(p.radius * 3)}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.emoji, sx, sy);
+    });
+
+    // Spirits
+    this.spirits.forEach(s => {
+      const sx = s.x - cx;
+      const sy = s.y - cy;
+      ctx.font = '16px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // Glow ring
+      ctx.strokeStyle = (ATTR_GLOW[s.attribute] || 'rgba(255,255,255,0.3)');
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, this.height);
+      ctx.arc(sx, sy, 12, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.fillText(s.emoji, sx, sy);
+    });
+
+    // Slot heroes
+    this.slotHeroes.forEach(h => {
+      const sx = h.x - cx;
+      const sy = h.y - cy;
+      ctx.font = '18px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(h.emoji, sx, sy);
+    });
+
+    // Pet
+    if (this.pet) {
+      const sx = this.pet.x - cx;
+      const sy = this.pet.y - cy;
+      ctx.font = '16px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // Green aura
+      ctx.shadowColor = 'rgba(134,239,172,0.5)';
+      ctx.shadowBlur = 8;
+      ctx.fillText(this.pet.emoji, sx, sy);
+      ctx.shadowBlur = 0;
     }
-    for (let y = 0; y < this.height; y += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(this.width, y);
-      ctx.stroke();
-    }
 
-    // Draw enemies
-    this.enemies.forEach(e => e.draw(ctx));
+    // Player
+    this._drawPlayer(ctx, cx, cy);
 
-    // Draw projectiles
-    this.projectiles.forEach(p => p.draw(ctx));
-
-    // Draw allies
-    this.allies.forEach(a => a.draw(ctx));
-
-    // Draw player
-    this.player.draw(ctx);
-
-    // Draw particles
+    // Particles
     this.particles.forEach(p => {
-      ctx.globalAlpha = Math.max(0, p.life / 400);
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      const sx = p.x - cx;
+      const sy = p.y - cy;
+      const alpha = Math.max(0, p.life / 1200);
+      ctx.globalAlpha = alpha;
+      if (p.type === 'text') {
+        ctx.font = 'bold 14px "Noto Sans KR", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, sx, sy);
+      } else {
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(sx, sy, p.size || 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     });
     ctx.globalAlpha = 1;
 
-    // Draw wave indicator
-    ctx.fillStyle = '#fbbf24';
-    ctx.font = '14px "Noto Sans KR", sans-serif';
-    ctx.textAlign = 'left';
-    const waveText = `웨이브 ${Math.min(this.currentWaveIndex, this.waves.length + (this.bossWave ? 1 : 0))}/${this.waves.length + (this.bossWave ? 1 : 0)}`;
-    ctx.fillText(waveText, 10, 20);
+    // HUD (on top)
+    this._drawHUD(ctx);
+  }
 
-    // HP bar on canvas (backup)
+  _drawSlime(ctx, e, cx, cy) {
+    const sx = e.x - cx;
+    const sy = e.y - cy - e.bounceY;
+    const r = e.radius;
+
+    ctx.save();
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, e.y - cy + r * 0.3, r * 0.7, r * 0.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body (round slime)
+    ctx.fillStyle = e.color;
+    ctx.strokeStyle = e.color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(sx - r * 0.25, sy - r * 0.3, r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(sx - r * 0.25, sy - r * 0.15, r * 0.2, 0, Math.PI * 2);
+    ctx.arc(sx + r * 0.25, sy - r * 0.15, r * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(sx - r * 0.2, sy - r * 0.1, r * 0.1, 0, Math.PI * 2);
+    ctx.arc(sx + r * 0.3, sy - r * 0.1, r * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Mouth
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(sx, sy + r * 0.15, r * 0.15, 0, Math.PI);
+    ctx.stroke();
+
+    // Boss crown
+    if (e.isBoss) {
+      ctx.font = `${Math.round(r)}px serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('👑', sx, sy - r - 5);
+    }
+
+    // HP bar
+    if (e.hp < e.maxHp) {
+      const barW = r * 2;
+      const barH = 3;
+      const hpRatio = e.hp / e.maxHp;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(sx - barW / 2, sy - r - 8, barW, barH);
+      ctx.fillStyle = hpRatio > 0.5 ? '#86efac' : hpRatio > 0.25 ? '#fbbf24' : '#ff6b6b';
+      ctx.fillRect(sx - barW / 2, sy - r - 8, barW * hpRatio, barH);
+    }
+
+    ctx.restore();
+  }
+
+  _drawPlayer(ctx, cx, cy) {
+    const p = this.player;
+    const sx = p.x - cx;
+    const sy = p.y - cy + Math.sin(p.bobPhase) * 3;
+
+    // Rage glow
+    if (this.rageActive) {
+      ctx.shadowColor = 'rgba(255,50,50,0.6)';
+      ctx.shadowBlur = 20;
+    }
+
+    ctx.font = '28px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.emoji, sx, sy);
+    ctx.shadowBlur = 0;
+  }
+
+  _drawHUD(ctx) {
+    const pad = 10;
+    const barW = 140;
+    const barH = 12;
+
+    // Background panel
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.roundRect(pad - 4, pad - 4, barW + 8, 70, 8);
+    ctx.fill();
+
+    // Wave text
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 12px "Noto Sans KR", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`웨이브 ${this.currentWave}/${this.maxWaves}`, pad, pad + 10);
+
+    // HP bar
+    const hpY = pad + 20;
     const hpRatio = this.player.hp / this.player.maxHp;
     ctx.fillStyle = 'rgba(30,30,50,0.8)';
-    ctx.fillRect(10, 30, 120, 10);
+    ctx.fillRect(pad, hpY, barW, barH);
     ctx.fillStyle = hpRatio > 0.5 ? '#86efac' : hpRatio > 0.25 ? '#fbbf24' : '#ff6b6b';
-    ctx.fillRect(10, 30, 120 * hpRatio, 10);
+    ctx.fillRect(pad, hpY, barW * hpRatio, barH);
     ctx.strokeStyle = 'rgba(80,80,120,0.5)';
-    ctx.strokeRect(10, 30, 120, 10);
+    ctx.strokeRect(pad, hpY, barW, barH);
+    // HP text
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(this.player.hp)}/${this.player.maxHp}`, pad + barW / 2, hpY + 9);
 
-    // Shield bar
-    if (this.player.shield > 0) {
-      ctx.fillStyle = 'rgba(103,232,249,0.6)';
-      const shieldW = Math.min(120, (this.player.shield / 50) * 120);
-      ctx.fillRect(10, 42, shieldW, 5);
+    // Rage bar (red under HP)
+    const rageY = hpY + barH + 4;
+    ctx.fillStyle = 'rgba(30,30,50,0.8)';
+    ctx.fillRect(pad, rageY, barW, 6);
+    const rageColor = this.rageActive ? '#ff3333' : '#ff6b6b';
+    ctx.fillStyle = rageColor;
+    ctx.fillRect(pad, rageY, barW * (this.rageGauge / 100), 6);
+    if (this.rageActive) {
+      ctx.fillStyle = '#ff6b6b';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('💢 RAGE!', pad + barW + 4, rageY + 5);
+    }
+
+    // Pet heal indicator
+    if (this.pet) {
+      const petY = rageY + 10;
+      ctx.fillStyle = 'rgba(30,30,50,0.8)';
+      ctx.fillRect(pad, petY, barW, 6);
+      ctx.fillStyle = '#86efac';
+      ctx.fillRect(pad, petY, barW * (this.petHealGauge / 100), 6);
+      ctx.fillStyle = '#86efac';
+      ctx.font = '9px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('💚', pad - 1, petY + 6);
+    }
+
+    // Kill count (top right)
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(`💀 ${this.totalKills}  💰 ${this.totalGold}G`, this.W - pad, pad + 12);
+
+    // Upgrade item count
+    if (this.droppedItems.length > 0) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '10px sans-serif';
+      ctx.fillText(`🎁 ${this.droppedItems.length}개 아이템!`, this.W - pad, pad + 26);
     }
   }
 
-  // Input handling
+  // ══════════════════════════════════════
+  //  HELPERS
+  // ══════════════════════════════════════
+  _findNearest(from, list) {
+    let nearest = null, minDist = Infinity;
+    for (const e of list) {
+      const d = this._dist(from, e);
+      if (d < minDist) { minDist = d; nearest = e; }
+    }
+    return nearest;
+  }
+
+  _dist(a, b) {
+    return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  }
+
+  _circleHit(a, b) {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    const rr = (a.radius || 5) + (b.radius || 5);
+    return dx * dx + dy * dy < rr * rr;
+  }
+
+  // ══════════════════════════════════════
+  //  INPUT
+  // ══════════════════════════════════════
   _bindInput() {
-    this._onKeyDown = (e) => { this._keys[e.key.toLowerCase()] = true; };
-    this._onKeyUp = (e) => { this._keys[e.key.toLowerCase()] = false; };
+    this._onKeyDown = e => { this._keys[e.key.toLowerCase()] = true; };
+    this._onKeyUp = e => { this._keys[e.key.toLowerCase()] = false; };
     window.addEventListener('keydown', this._onKeyDown);
     window.addEventListener('keyup', this._onKeyUp);
+
+    // Touch
+    this._onTouchStart = e => {
+      const t = e.touches[0];
+      this._touchStart = { x: t.clientX, y: t.clientY };
+    };
+    this._onTouchMove = e => {
+      if (!this._touchStart) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      const dx = t.clientX - this._touchStart.x;
+      const dy = t.clientY - this._touchStart.y;
+      const mag = Math.sqrt(dx * dx + dy * dy);
+      if (mag > 10) {
+        this._touchDir = { x: dx / mag, y: dy / mag };
+      }
+    };
+    this._onTouchEnd = () => {
+      this._touchStart = null;
+      this._touchDir = { x: 0, y: 0 };
+    };
+    // Mouse drag
+    this._mouseDown = false;
+    this._onMouseDown = e => {
+      this._mouseDown = true;
+      this._touchStart = { x: e.clientX, y: e.clientY };
+    };
+    this._onMouseMove = e => {
+      if (!this._mouseDown || !this._touchStart) return;
+      const dx = e.clientX - this._touchStart.x;
+      const dy = e.clientY - this._touchStart.y;
+      const mag = Math.sqrt(dx * dx + dy * dy);
+      if (mag > 10) {
+        this._touchDir = { x: dx / mag, y: dy / mag };
+      }
+    };
+    this._onMouseUp = () => {
+      this._mouseDown = false;
+      this._touchStart = null;
+      this._touchDir = { x: 0, y: 0 };
+    };
+
+    this.canvas.addEventListener('touchstart', this._onTouchStart, { passive: false });
+    this.canvas.addEventListener('touchmove', this._onTouchMove, { passive: false });
+    this.canvas.addEventListener('touchend', this._onTouchEnd);
+    this.canvas.addEventListener('mousedown', this._onMouseDown);
+    window.addEventListener('mousemove', this._onMouseMove);
+    window.addEventListener('mouseup', this._onMouseUp);
   }
 
   _unbindInput() {
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
-  }
-
-  setTouchDirection(x, y) {
-    this._touchDir = { x, y };
+    this.canvas.removeEventListener('touchstart', this._onTouchStart);
+    this.canvas.removeEventListener('touchmove', this._onTouchMove);
+    this.canvas.removeEventListener('touchend', this._onTouchEnd);
+    this.canvas.removeEventListener('mousedown', this._onMouseDown);
+    window.removeEventListener('mousemove', this._onMouseMove);
+    window.removeEventListener('mouseup', this._onMouseUp);
   }
 }
+
+// Attr glow colors for spirit ring
+const ATTR_GLOW = {
+  fire: 'rgba(255,69,0,0.5)', water: 'rgba(30,144,255,0.5)',
+  earth: 'rgba(139,69,19,0.5)', wind: 'rgba(152,251,152,0.5)',
+  light: 'rgba(255,215,0,0.5)', dark: 'rgba(106,13,173,0.5)',
+  nature: 'rgba(34,139,34,0.5)', ice: 'rgba(0,206,209,0.5)',
+};
