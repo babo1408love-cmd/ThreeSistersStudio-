@@ -8,6 +8,7 @@ import { SPIRIT_PARTS, PART_KEYS, autoMatchParts, countLegendFragments, determin
 import { createHudBar, updateHud } from '../ui/hud.js';
 import { showConfetti, showToast } from '../ui/toast.js';
 import { getRarityInfo } from '../systems/rarity-manager.js';
+import { PET_EVOLUTION, PET_EVOLUTION_POOL } from '../systems/pet-evolution-system.js';
 
 export default class SummoningRoomScene {
   onCreate() {
@@ -260,48 +261,18 @@ export default class SummoningRoomScene {
 
   // ── 펫 진화 ──
   _doPetEvolve() {
-    const legendFragments = GameState.spiritItems.filter(item => item.rarity === 'legendary');
-    if (legendFragments.length < 6) {
+    const result = PET_EVOLUTION.evolve(GameState.spiritItems);
+    if (!result.success) {
       showToast('레전드 조각이 부족합니다!');
       return;
     }
 
-    // 레전드 조각 6개 소모
-    const toRemove = legendFragments.slice(0, 6).map(f => f.id);
-    const removeSet = new Set(toRemove);
-    GameState.spiritItems = GameState.spiritItems.filter(item => !removeSet.has(item.id));
-
-    // 펫 풀에서 랜덤 선택
-    const PET_POOL = [
-      { name: '불꽃 드래곤', emoji: '🐉', element: 'fire', passive: 'ATK+15%' },
-      { name: '얼음 유니콘', emoji: '🦄', element: 'ice', passive: 'DEF+15%' },
-      { name: '번개 피닉스', emoji: '🦅', element: 'lightning', passive: 'SPD+20%' },
-      { name: '자연 거북이', emoji: '🐢', element: 'nature', passive: 'HP+20%' },
-      { name: '그림자 고양이', emoji: '🐈‍⬛', element: 'dark', passive: 'CRIT+10%' },
-      { name: '바람 매', emoji: '🦅', element: 'wind', passive: 'DODGE+10%' },
-      { name: '물 해마', emoji: '🐠', element: 'water', passive: 'HEAL+5/s' },
-      { name: '대지 곰', emoji: '🐻', element: 'earth', passive: 'ARMOR+20%' },
-    ];
-
-    const petDef = PET_POOL[Math.floor(Math.random() * PET_POOL.length)];
-    const pet = {
-      id: `pet_${Date.now()}`,
-      ...petDef,
-      rarity: 'legendary',
-      rarityId: 4,
-      level: 1,
-      defense: 5,
-      atk: 40,
-      atkSpeed: 0.8,
-      isPet: true,
-      permanent: true,
-    };
-
-    // 자동 장착
-    GameState.equipPet(pet);
+    // 조각 업데이트 + 펫 장착
+    GameState.spiritItems = result.remaining;
+    GameState.equipPet(result.pet);
 
     // 연출
-    this._showPetEvolveReveal(pet);
+    this._showPetEvolveReveal(result.pet);
   }
 
   _showSummonReveal(spirit) {
