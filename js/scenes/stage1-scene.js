@@ -6,7 +6,7 @@ import EventBus from '../core/event-bus.js';
 import { getStage } from '../data/stages.js';
 import { createHudBar } from '../ui/hud.js';
 import CandyMatch from '../games/candy-match.js';
-import MarbleShoot from '../games/marble-shoot.js';
+import ShisenMatch from '../games/shisen-match.js';
 import TreasureEvent from '../games/treasure-event.js';
 
 export default class Stage1Scene {
@@ -70,15 +70,13 @@ export default class Stage1Scene {
 
   _startMarble() {
     GameState.currentPhase = 'marble';
-    this._subGame = new MarbleShoot(this._container, {
-      shots: this._diceSum || this._stage.marble.shots,
-      gridSize: this._stage.marble.gridSize,
+    this._subGame = new ShisenMatch(this._container, {
       stageId: this._stage.id,
       onComplete: (result) => {
         GameState.addGold(Math.floor(result.score / 2));
-        // Loot is handled inside marble-shoot
+        // Loot is handled inside shisen-match
         GameState.stageProgress.marbleCleared = true;
-        this._showPhaseTransition('마블 슈팅 클리어!', '🔮', () => {
+        this._showPhaseTransition('사천성 클리어!', '🀄', () => {
           this._startNextPhase();
         });
       }
