@@ -32,166 +32,99 @@ export const PART_DROP_CONFIG = {
 
 // --- 정령 소환 규칙 ---
 export const SUMMON_RULES = {
-  // 소환에 필요한 파츠 수: 3개 부위면 소환 가능 (아무 3부위 조합)
-  requiredParts: 3,
-  requiredPartKeys: ['head', 'body', 'arms', 'wings', 'legs', 'shoes'],
+  // 소환에 필요한 조각 수: 부위 상관없이 6개
+  requiredFragments: 6,
 
-  // 등급 제한: 없음! 다른 등급 파츠를 섞어도 소환 가능
-  // 예: common 머리 + epic 몸통 + rare 날개 + ... → 소환 OK
-  rarityRestriction: false,
+  // 부위 구분 없음! 아무 조각 6개면 소환 가능
+  partDistinctRequired: false,
 
-  // 부위별 구분: 반드시 6부위 모두 다른 부위여야 함
-  partDistinctRequired: true,
-
-  // 같은 정령의 파츠만 모아야 하는가?
-  // false: 아무 정령의 파츠나 섞어서 소환 가능 (결과는 랜덤)
-  // true: 같은 spiritKey의 파츠만 모아야 함
-  sameSpiritRequired: false,
-
-  // 소환 결과 결정 규칙
+  // 소환 결과: rollSummonRarity()로 등급 결정 (커먼45%/레어30%/에픽25%)
+  // 레전드/신화는 절대 안 나옴 (rarity-manager.js 참조)
   resultDetermination: {
-    // 사용된 파츠 중 가장 높은 등급 기준으로 소환 결과 등급 결정
-    method: 'highest_rarity',
-    // 같은 정령 파츠가 많을수록 해당 정령 소환 확률 증가
-    sameSpiritBonus: true,
-    sameSpiritBonusPercent: 20,  // 같은 정령 파츠 1개당 +20% 가중치
+    method: 'random_rarity',
   },
 
-  // 소환 후 사용된 파츠 제거, 미사용 파츠는 인벤토리에 잔류
+  // 소환 후 사용된 조각 6개 제거
   consumeUsedParts: true,
   keepUnusedParts: true,
 };
 
 
 // --- 자동 매칭 알고리즘 ---
-// 소환의 나무에서 소환 아이콘 클릭 시 자동으로 최적 조합을 찾아 매칭
-// 등급 상관없이 부위만 맞추면 됨
-// 우선순위: 같은 정령의 파츠를 우선 매칭 → 없으면 아무 파츠로 채움
+// 부위 상관없이 조각 6개만 있으면 소환 가능!
+// 일반 조각만 사용 (레전드 조각은 펫 진화용이므로 제외)
 
 export function autoMatchParts(spiritItems) {
   // spiritItems: GameState.spiritItems 배열
-  // 각 아이템: { spiritKey, part, rarity, emoji, name, ... }
+  // 일반 조각만 필터 (레전드 조각은 펫 진화용)
+  const normalFragments = spiritItems.filter(item => item.rarity !== 'legendary');
+  const required = SUMMON_RULES.requiredFragments;
 
-  // 1. 부위별로 분류
-  const byPart = {};
-  for (const key of PART_KEYS) {
-    byPart[key] = spiritItems.filter(item => item.part === key);
-  }
-
-  // 2. 최소 3개 서로 다른 부위가 있는지 확인
-  const availableParts = PART_KEYS.filter(key => byPart[key].length > 0);
-  if (availableParts.length < SUMMON_RULES.requiredParts) {
-    const missing = PART_KEYS.filter(key => byPart[key].length === 0);
+  if (normalFragments.length < required) {
     return {
       success: false,
-      missing,
-      collected: availableParts.length,
-      required: SUMMON_RULES.requiredParts,
-      message: `파츠 ${availableParts.length}/${SUMMON_RULES.requiredParts}개 — 부족: ${missing.map(k => SPIRIT_PARTS.find(p => p.key === k)?.name).join(', ')}`,
+      missing: [],
+      collected: normalFragments.length,
+      required,
+      message: `조각 ${normalFragments.length}/${required}개 — ${required - normalFragments.length}개 더 필요`,
     };
   }
 
-  // 3. 같은 정령 파츠 우선 매칭 시도
-  const spiritPartCounts = {};
-  for (const item of spiritItems) {
-    if (!spiritPartCounts[item.spiritKey]) spiritPartCounts[item.spiritKey] = new Set();
-    spiritPartCounts[item.spiritKey].add(item.part);
-  }
-
-  // 가장 많은 부위를 가진 정령을 우선 타겟
-  let bestSpiritKey = null;
-  let bestCount = 0;
-  for (const [key, parts] of Object.entries(spiritPartCounts)) {
-    if (parts.size > bestCount) {
-      bestCount = parts.size;
-      bestSpiritKey = key;
-    }
-  }
-
-  // 4. 매칭 구성: 보유한 부위 중 requiredParts개만 선택 (우선 bestSpiritKey)
-  const selected = [];
-  const usedIds = new Set();
-
-  // 보유 부위 중 requiredParts개 선택 (같은 정령 파츠 우선)
-  const sortedParts = [...availableParts].sort((a, b) => {
-    const aHasBest = byPart[a].some(item => item.spiritKey === bestSpiritKey) ? 0 : 1;
-    const bHasBest = byPart[b].some(item => item.spiritKey === bestSpiritKey) ? 0 : 1;
-    return aHasBest - bHasBest;
-  });
-  const useParts = sortedParts.slice(0, SUMMON_RULES.requiredParts);
-
-  for (const partKey of useParts) {
-    // 우선: 같은 정령 파츠
-    let pick = byPart[partKey].find(item => item.spiritKey === bestSpiritKey && !usedIds.has(item.id));
-    if (!pick) {
-      const rarityOrder = ['legendary', 'epic', 'magic', 'rare', 'common'];
-      const sorted = [...byPart[partKey]]
-        .filter(item => !usedIds.has(item.id))
-        .sort((a, b) => rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity));
-      pick = sorted[0];
-    }
-    if (!pick) continue;
-    selected.push(pick);
-    usedIds.add(pick.id);
-  }
-
-  if (selected.length < SUMMON_RULES.requiredParts) {
-    return { success: false, missing: [], message: '파츠 매칭 실패' };
-  }
+  // 아무 조각 6개 선택 (먼저 들어온 순서)
+  const selected = normalFragments.slice(0, required);
+  const usedIds = selected.map(item => item.id);
 
   return {
     success: true,
     selectedParts: selected,
-    targetSpiritKey: bestSpiritKey,
-    usedIds: [...usedIds],
+    targetSpiritKey: null,
+    usedIds,
   };
+}
+
+// 레전드 조각 수 카운트
+export function countLegendFragments(spiritItems) {
+  return spiritItems.filter(item => item.rarity === 'legendary').length;
 }
 
 
 // --- 소환 결과 결정 ---
+// rollSummonRarity()로 등급 결정 (커먼45%/레어30%/에픽25%)
+// 레전드/신화는 절대 안 나옴!
+import { rollSummonRarity, getRarityInfo, getRarityStats } from '../systems/rarity-manager.js';
+
 export function determineSummonResult(selectedParts, allSpirits) {
-  // selectedParts: 6개의 선택된 파츠 배열
+  // 등급 랜덤 결정
+  const rarityId = rollSummonRarity(); // 1=커먼, 2=레어, 3=에픽
+  const rarityInfo = getRarityInfo(rarityId);
 
-  // 가장 높은 등급 찾기
-  const rarityOrder = ['common', 'rare', 'magic', 'epic', 'legendary'];
-  let highestRarityIdx = 0;
-  for (const part of selectedParts) {
-    const idx = rarityOrder.indexOf(part.rarity);
-    if (idx > highestRarityIdx) highestRarityIdx = idx;
-  }
-  const resultRarity = rarityOrder[highestRarityIdx];
+  // 등급 이름을 기존 시스템의 rarity 문자열로 변환
+  const rarityNameMap = { 1: 'common', 2: 'rare', 3: 'epic' };
+  const resultRarity = rarityNameMap[rarityId] || 'common';
 
-  // 같은 정령 파츠 카운트 → 해당 정령 가중치 증가
-  const spiritCounts = {};
-  for (const part of selectedParts) {
-    spiritCounts[part.spiritKey] = (spiritCounts[part.spiritKey] || 0) + 1;
-  }
-
-  // 해당 등급 정령 풀에서 가중치 기반 선택
-  const spiritsOfRarity = allSpirits.filter(s => s.rarity === resultRarity);
-  if (spiritsOfRarity.length === 0) {
-    // 해당 등급 정령 없으면 한 단계 아래로
-    const fallbackIdx = Math.max(0, highestRarityIdx - 1);
-    const fallbackRarity = rarityOrder[fallbackIdx];
-    const fallbackSpirits = allSpirits.filter(s => s.rarity === fallbackRarity);
-    return fallbackSpirits[Math.floor(Math.random() * fallbackSpirits.length)];
+  // 해당 등급 정령 풀에서 랜덤 선택
+  let pool = allSpirits.filter(s => s.rarity === resultRarity);
+  if (pool.length === 0) {
+    // 해당 등급 정령 없으면 아무거나 (common 풀백)
+    pool = allSpirits.filter(s => s.rarity === 'common');
+    if (pool.length === 0) pool = allSpirits;
   }
 
-  // 가중치 계산
-  const weights = spiritsOfRarity.map(s => {
-    const baseWeight = 10;
-    const bonus = (spiritCounts[s.key] || 0) * SUMMON_RULES.resultDetermination.sameSpiritBonusPercent / 100 * baseWeight;
-    return { spirit: s, weight: baseWeight + bonus };
-  });
+  const spirit = pool[Math.floor(Math.random() * pool.length)];
 
-  const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
-  let roll = Math.random() * totalWeight;
-  for (const w of weights) {
-    roll -= w.weight;
-    if (roll <= 0) return w.spirit;
-  }
+  // 등급별 스탯 적용
+  const stats = getRarityStats(rarityId);
 
-  return spiritsOfRarity[0];
+  return {
+    ...spirit,
+    rarityId,
+    rarityLabel: `${rarityInfo.emoji} ${rarityInfo.name} (${rarityInfo.stars})`,
+    defense: stats.defense,
+    spiritAtk: stats.atk,
+    spiritAtkSpeed: stats.atkSpeed,
+    spiritMoveSpeed: stats.moveSpeed,
+    hasSkill: stats.hasSkill,
+  };
 }
 
 

@@ -1,16 +1,18 @@
-// Summoning Room Scene — 파츠 기반 정령 소환
+// Summoning Room Scene — 조각 6개 = 정령 소환 + 펫 진화 탭
 import SceneManager from '../core/scene-manager.js';
 import GameState from '../core/game-state.js';
 import SaveManager from '../core/save-manager.js';
 import EventBus from '../core/event-bus.js';
 import SPIRITS, { RARITY_COLORS, RARITY_NAMES, RARITY_BG } from '../data/spirits.js';
-import { SPIRIT_PARTS, PART_KEYS, autoMatchParts, determineSummonResult } from '../data/spirit-parts-config.js';
+import { SPIRIT_PARTS, PART_KEYS, autoMatchParts, countLegendFragments, determineSummonResult } from '../data/spirit-parts-config.js';
 import { createHudBar, updateHud } from '../ui/hud.js';
 import { showConfetti, showToast } from '../ui/toast.js';
+import { getRarityInfo } from '../systems/rarity-manager.js';
 
 export default class SummoningRoomScene {
   onCreate() {
     this._revealOverlay = null;
+    this._activeTab = 'summon'; // 'summon' | 'pet'
   }
 
   render() {
@@ -30,94 +32,64 @@ export default class SummoningRoomScene {
     const spiritItems = GameState.spiritItems;
     const spirits = GameState.spirits;
 
-    // 부위별 파츠 카운트
-    const partCounts = {};
-    for (const pk of PART_KEYS) partCounts[pk] = 0;
-    spiritItems.forEach(item => {
-      if (item.part && partCounts[item.part] !== undefined) {
-        partCounts[item.part]++;
-      }
-    });
+    // 조각 수 계산
+    const normalFragments = spiritItems.filter(item => item.rarity !== 'legendary');
+    const legendFragments = countLegendFragments(spiritItems);
+    const canSummon = normalFragments.length >= 6;
 
-    // 자동 매칭 가능 여부
-    const matchResult = autoMatchParts(spiritItems);
-    const canSummon = matchResult.success;
+    // 펫 진화 가능 여부
+    const canEvolvePet = legendFragments >= 6;
+
+    // 탭 활성 상태
+    const tab = this._activeTab;
 
     container.innerHTML = `
       <div class="scene-title" style="color:var(--purple);">🌳 소환의 나무</div>
-      <div class="scene-subtitle">6부위 파츠를 모아 정령을 깨워 함께 싸우세요</div>
 
-      <div class="summoning-tree" id="summon-tree">🌳</div>
-
-      <div style="margin-bottom:12px;color:var(--text-secondary);font-size:0.9em;">
-        보유 정령 파츠: ${spiritItems.length}개
-      </div>
-
-      <!-- 부위별 파츠 현황 -->
-      <div id="parts-grid" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;max-width:360px;margin-left:auto;margin-right:auto;"></div>
-
-      <!-- 소환 버튼 -->
-      <div style="margin-bottom:16px;">
-        <button class="btn ${canSummon ? 'btn-primary' : 'btn-disabled'} btn-lg" id="btn-summon"
-          ${canSummon ? '' : 'disabled'} style="${canSummon ? 'animation:pulse 1.5s infinite;' : 'opacity:0.4;'}">
-          🌳 정령 소환!
+      <!-- 탭 -->
+      <div style="display:flex;gap:4px;justify-content:center;margin-bottom:12px;">
+        <button class="btn ${tab === 'summon' ? 'btn-primary' : 'btn-secondary'} btn-sm" id="tab-summon">
+          🌳 정령 소환
         </button>
-        ${!canSummon && matchResult.missing ? `
-          <div style="font-size:0.75em;color:var(--text-muted);margin-top:6px;">
-            부족: ${matchResult.missing.map(k => {
-              const p = SPIRIT_PARTS.find(sp => sp.key === k);
-              return p ? p.emoji + p.name : k;
-            }).join(', ')}
-          </div>
-        ` : ''}
+        <button class="btn ${tab === 'pet' ? 'btn-primary' : 'btn-secondary'} btn-sm" id="tab-pet">
+          🐉 펫 진화
+        </button>
       </div>
+
+      <div id="tab-content"></div>
 
       <!-- 소환된 정령 -->
-      <div style="margin-bottom:16px;">
+      <div style="margin:16px 0 8px;">
         <div style="color:var(--text-secondary);font-size:0.85em;margin-bottom:8px;">
-          소환된 정령 (${spirits.length}마리)
+          소환된 정령 (${spirits.length}마리)${GameState.petSlot ? ` | 펫: ${GameState.petSlot.emoji} ${GameState.petSlot.name}` : ''}
         </div>
-        <div class="spirit-slots" id="spirit-slots">
+        <div class="spirit-slots" id="spirit-slots" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
           ${spirits.length === 0 ? '<div style="color:var(--text-muted);font-size:0.85em;">아직 소환된 정령이 없습니다</div>' : ''}
-          ${spirits.map(s => `
-            <div class="spirit-slot filled" title="${s.name}\n${s.ability.description}">
-              ${s.emoji}
-            </div>
-          `).join('')}
+          ${this._renderSpiritStacks(spirits)}
         </div>
       </div>
 
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px;">
         <button class="btn btn-primary btn-lg" id="btn-depart">⚔️ 전투 출발!</button>
       </div>
     `;
 
-    // 부위별 파츠 현황 렌더링
-    const partsGrid = container.querySelector('#parts-grid');
-    SPIRIT_PARTS.forEach(partDef => {
-      const count = partCounts[partDef.key] || 0;
-      const hasIt = count > 0;
-      const div = document.createElement('div');
-      div.style.cssText = `
-        display:flex;flex-direction:column;align-items:center;
-        width:50px;padding:6px 4px;
-        background:${hasIt ? 'rgba(134,239,172,0.12)' : 'rgba(30,30,50,0.6)'};
-        border:2px solid ${hasIt ? 'var(--green)' : 'var(--border-subtle)'};
-        border-radius:8px;opacity:${hasIt ? '1' : '0.5'};
-        transition:all 0.2s;
-      `;
-      div.innerHTML = `
-        <div style="font-size:18px;">${partDef.emoji}</div>
-        <div style="font-size:10px;font-weight:700;color:${hasIt ? 'var(--green)' : 'var(--text-muted)'};">${partDef.name}</div>
-        <div style="font-size:10px;color:var(--text-secondary);">×${count}</div>
-      `;
-      partsGrid.appendChild(div);
-    });
+    // 탭 전환
+    container.querySelector('#tab-summon').onclick = () => {
+      this._activeTab = 'summon';
+      this._renderContent(container);
+    };
+    container.querySelector('#tab-pet').onclick = () => {
+      this._activeTab = 'pet';
+      this._renderContent(container);
+    };
 
-    // 소환 버튼
-    const summonBtn = container.querySelector('#btn-summon');
-    if (canSummon && summonBtn) {
-      summonBtn.onclick = () => this._doAutoSummon();
+    // 탭 컨텐츠 렌더
+    const tabContent = container.querySelector('#tab-content');
+    if (tab === 'summon') {
+      this._renderSummonTab(tabContent, normalFragments, legendFragments, canSummon);
+    } else {
+      this._renderPetTab(tabContent, legendFragments, canEvolvePet);
     }
 
     // 출발 버튼
@@ -130,22 +102,146 @@ export default class SummoningRoomScene {
     };
   }
 
-  // 자동 매칭 소환
+  // ── 정령 소환 탭 ──
+  _renderSummonTab(el, normalFragments, legendFragments, canSummon) {
+    const normalCount = normalFragments.length;
+    const fragBar = Array.from({length: 6}, (_, i) =>
+      i < (normalCount % 6 || (normalCount >= 6 ? 6 : 0)) ? '▶️' : '⬛'
+    ).join('');
+    const setsAvailable = Math.floor(normalCount / 6);
+
+    el.innerHTML = `
+      <div class="summoning-tree" id="summon-tree" style="font-size:60px;margin:8px 0;">🌳</div>
+
+      <div style="font-size:0.9em;color:var(--text-secondary);margin-bottom:8px;">
+        조각 6개를 모으면 정령을 소환할 수 있어요!
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <div style="font-size:0.85em;margin-bottom:4px;">
+          일반 조각: <b style="color:var(--green);">${normalCount}</b>개
+          ${normalCount >= 6 ? `(${setsAvailable}회 소환 가능!)` : `(${6 - normalCount % 6}개 더 필요)`}
+        </div>
+        <div style="font-size:0.85em;color:var(--text-muted);">
+          레전드 조각: <b style="color:var(--gold);">${legendFragments}</b>개 (펫 진화용)
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <div style="font-size:0.85em;color:var(--text-muted);margin-bottom:4px;">소환 확률</div>
+        <div style="display:flex;gap:8px;justify-content:center;font-size:0.8em;">
+          <span style="color:#b2bec3;">⬜ 커먼 45%</span>
+          <span style="color:#74b9ff;">🟦 레어 30%</span>
+          <span style="color:#a29bfe;">🟪 에픽 25%</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <button class="btn ${canSummon ? 'btn-primary' : 'btn-disabled'} btn-lg" id="btn-summon"
+          ${canSummon ? '' : 'disabled'} style="${canSummon ? 'animation:pulse 1.5s infinite;' : 'opacity:0.4;'}">
+          🌳 정령 소환! (조각 6개)
+        </button>
+      </div>
+    `;
+
+    const summonBtn = el.querySelector('#btn-summon');
+    if (canSummon && summonBtn) {
+      summonBtn.onclick = () => this._doAutoSummon();
+    }
+  }
+
+  // ── 펫 진화 탭 ──
+  _renderPetTab(el, legendCount, canEvolve) {
+    const fragSlots = Array.from({length: 6}, (_, i) =>
+      i < legendCount ? '🟨' : '⬛'
+    ).join('');
+    const pets = GameState.spirits.filter(s => s.isPet);
+    const equippedPet = GameState.petSlot;
+
+    el.innerHTML = `
+      <div style="font-size:60px;margin:8px 0;">🐉</div>
+
+      <div style="font-size:0.9em;color:var(--text-secondary);margin-bottom:8px;">
+        레전드 조각 6개를 모아 펫으로 진화시키세요!
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <div style="font-size:0.85em;margin-bottom:4px;">
+          레전드 조각: <b style="color:var(--gold);">${legendCount}</b>/6 필요
+        </div>
+        <div style="font-size:1.5em;letter-spacing:4px;margin:8px 0;">${fragSlots}</div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <button class="btn ${canEvolve ? 'btn-primary' : 'btn-disabled'} btn-lg" id="btn-evolve"
+          ${canEvolve ? '' : 'disabled'} style="${canEvolve ? 'animation:pulse 1.5s infinite;' : 'opacity:0.4;'}">
+          🐉 펫 진화! (레전드 조각 6개)
+        </button>
+        ${!canEvolve ? `<div style="font-size:0.75em;color:var(--text-muted);margin-top:6px;">
+          💡 보스를 처치하면 레전드 조각을 얻을 수 있어요!
+        </div>` : ''}
+      </div>
+
+      <div style="border-top:1px solid var(--border-subtle);padding-top:12px;">
+        <div style="color:var(--text-secondary);font-size:0.85em;margin-bottom:8px;">보유 펫</div>
+        ${equippedPet ? `
+          <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:8px;">
+            <span style="font-size:28px;">${equippedPet.emoji}</span>
+            <div style="text-align:left;">
+              <div style="font-weight:700;color:var(--gold);">${equippedPet.name}</div>
+              <div style="font-size:0.8em;color:var(--text-secondary);">${equippedPet.passive || ''}</div>
+            </div>
+          </div>
+        ` : '<div style="color:var(--text-muted);font-size:0.85em;">아직 펫이 없어요</div>'}
+      </div>
+
+      <div style="margin-top:12px;font-size:0.75em;color:var(--text-muted);border:1px solid var(--border-subtle);border-radius:8px;padding:8px;">
+        <div style="font-weight:700;margin-bottom:4px;">정령 vs 펫 비교</div>
+        <div>🌳 정령: 조각 6개 → 커먼~에픽 → 1판만 참전</div>
+        <div>🐉 펫: 레전드 조각 6개 → 레전드 고정 → 영구 장착!</div>
+      </div>
+    `;
+
+    const evolveBtn = el.querySelector('#btn-evolve');
+    if (canEvolve && evolveBtn) {
+      evolveBtn.onclick = () => this._doPetEvolve();
+    }
+  }
+
+  // ── 정령 스택 렌더 (같은 속성+등급 묶기) ──
+  _renderSpiritStacks(spirits) {
+    if (spirits.length === 0) return '';
+    const stacks = {};
+    for (const s of spirits) {
+      const key = `${s.key || s.name}_${s.rarity}`;
+      if (!stacks[key]) stacks[key] = { spirit: s, count: 0 };
+      stacks[key].count++;
+    }
+    return Object.values(stacks).map(({ spirit, count }) => {
+      const rColor = RARITY_COLORS[spirit.rarity] || '#86efac';
+      return `<div class="spirit-slot filled" style="border-color:${rColor};position:relative;" title="${spirit.name} (${RARITY_NAMES[spirit.rarity] || spirit.rarity})${spirit.ability ? '\n' + spirit.ability.description : ''}">
+        ${spirit.emoji}
+        ${count > 1 ? `<span style="position:absolute;top:-4px;right:-4px;background:${rColor};color:#000;font-size:10px;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-weight:700;">×${count}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // ── 자동 매칭 소환 ──
   _doAutoSummon() {
     const matchResult = autoMatchParts(GameState.spiritItems);
     if (!matchResult.success) {
-      showToast('파츠가 부족합니다!');
+      showToast('조각이 부족합니다!');
       return;
     }
 
-    // 소환 결과 결정
+    // 소환 결과 결정 (랜덤 등급)
     const resultSpirit = determineSummonResult(matchResult.selectedParts, SPIRITS);
     if (!resultSpirit) {
       showToast('소환 실패...');
       return;
     }
 
-    // 사용된 파츠 제거 (미사용 파츠는 인벤토리에 잔류)
+    // 사용된 조각 제거
     const usedIdSet = new Set(matchResult.usedIds);
     GameState.spiritItems = GameState.spiritItems.filter(item => !usedIdSet.has(item.id));
 
@@ -159,34 +255,108 @@ export default class SummoningRoomScene {
     GameState.summonSpirit(spirit);
 
     // 소환 연출
-    this._showSummonReveal(spirit, matchResult.selectedParts);
+    this._showSummonReveal(spirit);
   }
 
-  _showSummonReveal(spirit, usedParts) {
+  // ── 펫 진화 ──
+  _doPetEvolve() {
+    const legendFragments = GameState.spiritItems.filter(item => item.rarity === 'legendary');
+    if (legendFragments.length < 6) {
+      showToast('레전드 조각이 부족합니다!');
+      return;
+    }
+
+    // 레전드 조각 6개 소모
+    const toRemove = legendFragments.slice(0, 6).map(f => f.id);
+    const removeSet = new Set(toRemove);
+    GameState.spiritItems = GameState.spiritItems.filter(item => !removeSet.has(item.id));
+
+    // 펫 풀에서 랜덤 선택
+    const PET_POOL = [
+      { name: '불꽃 드래곤', emoji: '🐉', element: 'fire', passive: 'ATK+15%' },
+      { name: '얼음 유니콘', emoji: '🦄', element: 'ice', passive: 'DEF+15%' },
+      { name: '번개 피닉스', emoji: '🦅', element: 'lightning', passive: 'SPD+20%' },
+      { name: '자연 거북이', emoji: '🐢', element: 'nature', passive: 'HP+20%' },
+      { name: '그림자 고양이', emoji: '🐈‍⬛', element: 'dark', passive: 'CRIT+10%' },
+      { name: '바람 매', emoji: '🦅', element: 'wind', passive: 'DODGE+10%' },
+      { name: '물 해마', emoji: '🐠', element: 'water', passive: 'HEAL+5/s' },
+      { name: '대지 곰', emoji: '🐻', element: 'earth', passive: 'ARMOR+20%' },
+    ];
+
+    const petDef = PET_POOL[Math.floor(Math.random() * PET_POOL.length)];
+    const pet = {
+      id: `pet_${Date.now()}`,
+      ...petDef,
+      rarity: 'legendary',
+      rarityId: 4,
+      level: 1,
+      defense: 5,
+      atk: 40,
+      atkSpeed: 0.8,
+      isPet: true,
+      permanent: true,
+    };
+
+    // 자동 장착
+    GameState.equipPet(pet);
+
+    // 연출
+    this._showPetEvolveReveal(pet);
+  }
+
+  _showSummonReveal(spirit) {
     showConfetti();
 
+    const rarityId = spirit.rarityId || 1;
+    const rarityInfo = getRarityInfo(rarityId);
     const badgeClass = ({common:'green',rare:'purple',magic:'cyan',epic:'gold',legendary:'red'})[spirit.rarity] || 'green';
+
     const overlay = document.createElement('div');
     overlay.className = 'summon-reveal';
     overlay.innerHTML = `
-      <div class="summon-reveal__spirit">${spirit.emoji}</div>
-      <div class="summon-reveal__name">${spirit.name}</div>
-      <div class="summon-reveal__stats">
-        <span class="badge badge-${badgeClass}">
-          ${RARITY_NAMES[spirit.rarity]}
+      <div class="summon-reveal__spirit" style="font-size:80px;">${spirit.emoji}</div>
+      <div class="summon-reveal__name" style="font-size:1.3em;font-weight:700;margin:8px 0;">${spirit.name}</div>
+      <div style="margin:8px 0;">
+        <span class="badge badge-${badgeClass}" style="font-size:1em;">
+          ${rarityInfo.emoji} ${rarityInfo.name} ${rarityInfo.stars}
         </span>
-        <div style="margin-top:8px;font-size:0.85em;">
-          공격: ${spirit.stats.attack} | 방어: ${spirit.stats.defense} | 속도: ${spirit.stats.speed}
-        </div>
-        <div style="margin-top:4px;font-size:0.85em;color:var(--gold);">
-          ${spirit.ability.name}: ${spirit.ability.description}
-        </div>
       </div>
-      ${usedParts ? `
-        <div style="margin-top:12px;font-size:0.75em;color:var(--text-secondary);">
-          사용된 파츠: ${usedParts.map(p => `${p.partEmoji || ''}${SPIRIT_PARTS.find(sp => sp.key === p.part)?.name || p.part}`).join(' + ')}
-        </div>
-      ` : ''}
+      <div style="font-size:0.85em;margin-top:8px;">
+        방어: ${spirit.defense || 1} | 공격: ${spirit.spiritAtk || spirit.stats?.attack || 10} | 공속: ${spirit.spiritAtkSpeed || 2.0}초
+      </div>
+      ${spirit.ability ? `<div style="margin-top:4px;font-size:0.85em;color:var(--gold);">${spirit.ability.name}: ${spirit.ability.description}</div>` : ''}
+      <button class="btn btn-primary" style="margin-top:24px;" id="reveal-close">확인</button>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#reveal-close').onclick = () => {
+      overlay.remove();
+      const c = this.el.querySelector('#summoning-container');
+      if (c) this._renderContent(c);
+    };
+  }
+
+  _showPetEvolveReveal(pet) {
+    showConfetti();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'summon-reveal';
+    overlay.innerHTML = `
+      <div style="font-size:80px;animation:pulse 1s infinite;">${pet.emoji}</div>
+      <div style="font-size:1.5em;font-weight:700;color:var(--gold);margin:12px 0;">🌟 펫 진화 성공! 🌟</div>
+      <div style="font-size:1.2em;font-weight:700;">${pet.name}</div>
+      <div style="margin:8px 0;">
+        <span class="badge badge-gold" style="font-size:1em;">🟨 레전드 ★★★★☆</span>
+      </div>
+      <div style="font-size:0.9em;margin-top:8px;">
+        패시브: <b style="color:var(--green);">${pet.passive}</b>
+      </div>
+      <div style="font-size:0.85em;color:var(--text-secondary);margin-top:4px;">
+        방어: ${pet.defense} | 공격: ${pet.atk} | 공속: ${pet.atkSpeed}초
+      </div>
+      <div style="font-size:0.8em;color:var(--text-muted);margin-top:12px;">
+        💕 펫은 영구 동반자! 항상 함께해요!
+      </div>
       <button class="btn btn-primary" style="margin-top:24px;" id="reveal-close">확인</button>
     `;
     document.body.appendChild(overlay);
