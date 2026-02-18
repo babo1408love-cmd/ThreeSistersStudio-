@@ -1683,12 +1683,15 @@ export default class CandyMatch {
         }
       }
 
-      // Add triggered cells to matched set
+      // Add triggered cells to matched set + 콤보 반영
       if (triggeredExtra.size > 0) {
+        this.comboCount += triggeredExtra.size;
         for (const ek of triggeredExtra) matchedSet.add(ek);
         this._updateBoardDOM({ exploding: triggeredExtra });
         this.score += triggeredExtra.size * 20;
         showScoreFloat(triggeredExtra.size * 20);
+        if (this.comboCount >= 2) this._showComboEffect(this.comboCount);
+        if (typeof SoundSFX !== 'undefined' && this.comboCount >= 3 && SoundSFX.candyCombo) SoundSFX.candyCombo(this.comboCount);
         await this._wait(Math.round(480 * cSpd));
         if (this._destroyed) return;
       }
@@ -1704,9 +1707,12 @@ export default class CandyMatch {
         const purgeExtra = this._purifyBoard(bestTier.ability.clearPercent, matchedSet);
         for (const ek of purgeExtra) matchedSet.add(ek);
         if (purgeExtra.size > 0) {
+          this.comboCount += purgeExtra.size;
           this._updateBoardDOM({ exploding: purgeExtra });
           this.score += purgeExtra.size * 15;
           showScoreFloat(purgeExtra.size * 15);
+          if (this.comboCount >= 2) this._showComboEffect(this.comboCount);
+          if (typeof SoundSFX !== 'undefined' && this.comboCount >= 3 && SoundSFX.candyCombo) SoundSFX.candyCombo(this.comboCount);
           await this._wait(Math.round(660 * cSpd));
           if (this._destroyed) return;
         }
@@ -2188,13 +2194,19 @@ export default class CandyMatch {
 
     // 8) 추가 제거 셀을 matchedSet에 추가 + 연출
     if (extraCells.size > 0) {
+      this.comboCount += extraCells.size;
       for (const ek of extraCells) matchedSet.add(ek);
       this._updateBoardDOM({ exploding: extraCells });
       this.score += extraCells.size * 20;
       if (typeof showScoreFloat === 'function') showScoreFloat(extraCells.size * 20);
+      if (this.comboCount >= 2) this._showComboEffect(this.comboCount);
       // 효과음
-      if (typeof SoundSFX !== 'undefined' && SoundSFX.candyMatch) SoundSFX.candyMatch();
-      await this._wait(389);
+      if (typeof SoundSFX !== 'undefined') {
+        if (SoundSFX.candyMatch) SoundSFX.candyMatch(this.comboCount);
+        if (this.comboCount >= 3 && SoundSFX.candyCombo) SoundSFX.candyCombo(this.comboCount);
+      }
+      const cSpd = Math.max(0.15, 1.2 - (this.comboCount - 1) * 0.1);
+      await this._wait(Math.round(389 * cSpd));
     }
   }
 
