@@ -1461,6 +1461,13 @@ export default class CandyMatch {
 
       // 매치 그룹 수만큼 매치 카운트 증가 + 조각 진행
       this._matchCount += matchGroups.length;
+
+      // ★ 60매치 달성 시 즉시 루프 종료 (강제 클리어)
+      if (this._matchCount >= this._matchTarget) {
+        this.comboCount = 0;
+        return;
+      }
+
       for (let mg = 0; mg < matchGroups.length; mg++) {
         this._fragmentProgress++;
         if (this._fragmentProgress >= 6) {
