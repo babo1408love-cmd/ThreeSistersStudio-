@@ -10,6 +10,15 @@ import Stage1Scene from './scenes/stage1-scene.js';
 import SummoningRoomScene from './scenes/summoning-room-scene.js';
 import Stage2Scene from './scenes/stage2-scene.js';
 import GameOverScene from './scenes/game-over-scene.js';
+import WorldmapScene from './scenes/worldmap-scene.js';
+import SurvivalScene from './scenes/survival-scene.js';
+import DungeonScene from './scenes/dungeon-scene.js';
+import GachaScene from './scenes/gacha-scene.js';
+import QuestScene from './scenes/quest-scene.js';
+import ShopScene from './scenes/shop-scene.js';
+import ArenaScene from './scenes/arena-scene.js';
+import CodexScene from './scenes/codex-scene.js';
+import RankingScene from './scenes/ranking-scene.js';
 
 // UI
 import { openInventory, closeInventory } from './ui/inventory-ui.js';
@@ -25,6 +34,15 @@ function init() {
   SceneManager.register('summoning', SummoningRoomScene);
   SceneManager.register('stage2', Stage2Scene);
   SceneManager.register('gameover', GameOverScene);
+  SceneManager.register('worldmap', WorldmapScene);
+  SceneManager.register('survival', SurvivalScene);
+  SceneManager.register('dungeon', DungeonScene);
+  SceneManager.register('gacha', GachaScene);
+  SceneManager.register('quest', QuestScene);
+  SceneManager.register('shop', ShopScene);
+  SceneManager.register('arena', ArenaScene);
+  SceneManager.register('codex', CodexScene);
+  SceneManager.register('ranking', RankingScene);
 
   // Global inventory button handler
   document.addEventListener('click', (e) => {

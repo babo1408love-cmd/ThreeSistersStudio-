@@ -1,7 +1,11 @@
-// Main Menu Scene
+// Main Menu Scene — 전체 시스템 진입점
 import SceneManager from '../core/scene-manager.js';
 import SaveManager from '../core/save-manager.js';
 import GameState from '../core/game-state.js';
+import StaminaSystem from '../systems/stamina-system.js';
+import CurrencySystem from '../systems/currency-system.js';
+import RewardSystem from '../systems/reward-system.js';
+import { openSettings } from '../ui/settings-ui.js';
 
 export default class MainMenuScene {
   onCreate() {
@@ -11,27 +15,112 @@ export default class MainMenuScene {
   render() {
     const hasSave = SaveManager.hasSave();
 
+    // Init systems if save exists
+    if (hasSave) {
+      SaveManager.load();
+      StaminaSystem.processRegen();
+      CurrencySystem.init();
+      // Check daily login
+      const loginResult = RewardSystem.checkDailyLogin();
+      this._loginReward = loginResult;
+    }
+
+    const gold = hasSave ? CurrencySystem.get('gold') : 0;
+    const diamond = hasSave ? CurrencySystem.get('diamond') : 0;
+    const stamina = hasSave ? StaminaSystem.get() : 100;
+    const maxStamina = StaminaSystem.getMax();
+    const level = GameState.heroLevel || 1;
+
     this.el.innerHTML = `
       <div class="main-menu">
         <div class="main-menu__particles" id="menu-particles"></div>
         <div class="main-menu__logo"><span class="hero-fairy hero-fairy-lg">🧚</span></div>
         <div class="main-menu__title">몽글벨</div>
         <div class="main-menu__subtitle">버섯돌이 대마왕의 포자를 정화하라!</div>
+
+        ${hasSave ? `
+        <div class="mm-status-bar">
+          <span>Lv.${level}</span>
+          <span>💰${gold.toLocaleString()}</span>
+          <span>💎${diamond.toLocaleString()}</span>
+          <span>⚡${stamina}/${maxStamina}</span>
+        </div>` : ''}
+
         <div class="main-menu__buttons">
           <button class="btn btn-primary btn-lg" id="btn-new-game">✨ 새 게임</button>
           ${hasSave ? '<button class="btn btn-blue btn-lg" id="btn-continue">▶️ 이어하기</button>' : ''}
-          ${hasSave ? '<button class="btn btn-secondary" id="btn-summon-tree">🌳 소환의 나무</button>' : ''}
         </div>
-        <div class="main-menu__version">v1.0 — 몽글벨</div>
+
+        ${hasSave ? `
+        <div class="mm-nav-grid">
+          <button class="mm-nav-btn" id="btn-worldmap">🗺️<br>월드맵</button>
+          <button class="mm-nav-btn" id="btn-survival">⚔️<br>서바이벌</button>
+          <button class="mm-nav-btn" id="btn-dungeon">🏰<br>던전</button>
+          <button class="mm-nav-btn" id="btn-summon-tree">🌳<br>소환나무</button>
+          <button class="mm-nav-btn" id="btn-gacha">🎰<br>소환</button>
+          <button class="mm-nav-btn" id="btn-inventory">🎒<br>인벤토리</button>
+          <button class="mm-nav-btn" id="btn-quest">📋<br>퀘스트</button>
+          <button class="mm-nav-btn" id="btn-shop">🏪<br>상점</button>
+          <button class="mm-nav-btn" id="btn-arena">🏟️<br>아레나</button>
+          <button class="mm-nav-btn" id="btn-codex">📖<br>도감</button>
+          <button class="mm-nav-btn" id="btn-settings">⚙️<br>설정</button>
+          <button class="mm-nav-btn" id="btn-ranking">🏆<br>랭킹</button>
+        </div>` : ''}
+
+        <div class="main-menu__version">v2.0 — 몽글벨</div>
       </div>
+      <style>
+        .mm-status-bar {
+          display: flex; justify-content: center; gap: 12px;
+          font-size: 12px; color: #aaa; margin: 6px 0 10px;
+          background: rgba(0,0,0,0.3); padding: 6px 16px; border-radius: 20px;
+        }
+        .mm-nav-grid {
+          display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+          max-width: 340px; margin: 16px auto 0;
+        }
+        .mm-nav-btn {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 10px 4px; font-size: 12px; line-height: 1.3;
+          background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 12px; color: #ddd; cursor: pointer;
+          transition: background 0.2s, transform 0.15s;
+        }
+        .mm-nav-btn:hover { background: rgba(255,255,255,0.12); transform: scale(1.05); }
+        .mm-nav-btn:active { transform: scale(0.95); }
+      </style>
     `;
 
-    // Bind events
+    // Bind core events
     this.el.querySelector('#btn-new-game').onclick = () => this._newGame();
     if (hasSave) {
       this.el.querySelector('#btn-continue').onclick = () => this._continueGame();
-      const treeBtn = this.el.querySelector('#btn-summon-tree');
-      if (treeBtn) treeBtn.onclick = () => this._openSummonTree();
+
+      // Navigation buttons
+      const bind = (id, fn) => {
+        const el = this.el.querySelector(id);
+        if (el) el.onclick = fn;
+      };
+      bind('#btn-worldmap', () => SceneManager.go('worldmap'));
+      bind('#btn-survival', () => SceneManager.go('survival'));
+      bind('#btn-dungeon', () => SceneManager.go('dungeon'));
+      bind('#btn-summon-tree', () => { SaveManager.load(); SceneManager.go('summoning'); });
+      bind('#btn-gacha', () => SceneManager.go('gacha'));
+      bind('#btn-inventory', () => {
+        import('../ui/inventory-ui.js').then(m => m.openInventory());
+      });
+      bind('#btn-quest', () => SceneManager.go('quest'));
+      bind('#btn-shop', () => SceneManager.go('shop'));
+      bind('#btn-arena', () => SceneManager.go('arena'));
+      bind('#btn-codex', () => SceneManager.go('codex'));
+      bind('#btn-settings', () => openSettings());
+      bind('#btn-ranking', () => SceneManager.go('ranking'));
+    }
+
+    // Show login reward popup
+    if (this._loginReward) {
+      this._showLoginReward(this._loginReward);
+      this._loginReward = null;
     }
   }
 
@@ -56,7 +145,6 @@ export default class MainMenuScene {
     if (phase === 'summoning') {
       SceneManager.go('summoning');
     } else if (phase === 'combat') {
-      // If was in combat, restart from summoning checkpoint
       if (SaveManager.hasCheckpoint()) {
         SaveManager.loadCheckpoint();
       }
@@ -66,9 +154,37 @@ export default class MainMenuScene {
     }
   }
 
-  _openSummonTree() {
-    SaveManager.load();
-    SceneManager.go('summoning');
+  _showLoginReward(result) {
+    if (!result || !result.rewards) return;
+    const rewardText = Object.entries(result.rewards)
+      .map(([k, v]) => `${k}: +${v}`)
+      .join(', ');
+
+    const popup = document.createElement('div');
+    popup.className = 'mm-login-popup';
+    popup.innerHTML = `
+      <div class="mm-login-inner">
+        <div class="mm-login-title">🎁 출석 보상 (${result.streak}일차)</div>
+        <div class="mm-login-rewards">${rewardText}</div>
+        <button class="btn btn-primary btn-sm" id="mm-login-ok">확인</button>
+      </div>
+      <style>
+        .mm-login-popup {
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.7); z-index: 5000;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .mm-login-inner {
+          background: #1a1a2e; border-radius: 16px; padding: 24px; text-align: center;
+          border: 2px solid #FFD700; max-width: 300px;
+        }
+        .mm-login-title { font-size: 18px; color: #FFD700; margin-bottom: 10px; }
+        .mm-login-rewards { font-size: 14px; color: #ddd; margin-bottom: 16px; }
+      </style>
+    `;
+    document.body.appendChild(popup);
+    popup.querySelector('#mm-login-ok').onclick = () => popup.remove();
+    popup.addEventListener('click', e => { if (e.target === popup) popup.remove(); });
   }
 
   _startParticles() {
