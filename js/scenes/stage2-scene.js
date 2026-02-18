@@ -106,6 +106,22 @@ export default class Stage2Scene {
     const expReward = rewards.exp || 50;
     GameState.heroExp += expReward;
 
+    // 정령 소모 처리 (소모품 — 전투 후 자동 삭제)
+    const consumedSpirits = GameState.spirits.slice();
+    const consumedCount = consumedSpirits.length;
+    GameState.spirits = []; // 전투 후 정령 전부 소모
+
+    // HeroAI 정령 초기화
+    if (typeof HeroAI !== 'undefined') {
+      HeroAI.party.spirits = [];
+      HeroAI.party._calculated = false;
+    }
+
+    // 소모된 정령 목록 문자열
+    const consumedList = consumedCount > 0
+      ? consumedSpirits.map(s => `${s.emoji || '✨'}${s.name || '정령'}`).join(', ')
+      : '';
+
     const isLastStage = GameState.currentStage >= getMaxStage();
 
     const overlay = document.createElement('div');
@@ -121,6 +137,13 @@ export default class Stage2Scene {
         <span>❤️ HP: ${Math.round(result.hpRemaining)}</span>
         <span>⭐ +${expReward} EXP</span>
       </div>
+      ${consumedCount > 0 ? `
+        <div style="margin-top:12px;padding:8px 12px;background:rgba(255,200,100,0.12);border:1px solid rgba(255,200,100,0.3);border-radius:8px;max-width:360px;">
+          <div style="font-size:0.85em;color:#ffcc66;font-weight:700;">🌳 정령 ${consumedCount}마리 소환의 나무로 귀환</div>
+          <div style="font-size:0.75em;color:var(--text-muted);margin-top:4px;">${consumedList}</div>
+          <div style="font-size:0.7em;color:var(--text-muted);margin-top:2px;">다음 스테이지에서 새로 소환하세요!</div>
+        </div>
+      ` : ''}
       <div style="margin-top:20px;display:flex;gap:8px;">
         ${isLastStage
           ? '<button class="btn btn-gold btn-lg" id="victory-end">🏆 게임 클리어!</button>'

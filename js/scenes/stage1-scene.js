@@ -99,6 +99,11 @@ export default class Stage1Scene {
         this._stageTimer.update(100);
         this._stageTimer.updateDOM();
       }, 100);
+
+      // 정령 없으면 안내 토스트
+      if (GameState.spirits.length === 0 && GameState.currentStage >= 2) {
+        showToast('🌳 정령이 없습니다! 조각을 모아 소환하세요');
+      }
     });
 
     this._updateStatusBar();

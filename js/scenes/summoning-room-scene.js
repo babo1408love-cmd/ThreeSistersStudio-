@@ -107,6 +107,18 @@ export default class SummoningRoomScene {
       SaveManager.save();
       SceneManager.go('stage2');
     };
+
+    // 정령 삭제 버튼 바인딩
+    container.querySelectorAll('.spirit-delete-badge').forEach(badge => {
+      badge.onclick = (e) => {
+        e.stopPropagation();
+        const slot = badge.closest('.spirit-slot');
+        const spiritId = Number(slot?.dataset?.spiritId);
+        const spiritKey = slot?.dataset?.spiritKey;
+        const spiritRarity = slot?.dataset?.spiritRarity;
+        if (spiritId) this._deleteSpirit(spiritId, spiritKey, spiritRarity, container);
+      };
+    });
   }
 
   // ── 정령 소환 탭 ──
@@ -237,20 +249,23 @@ export default class SummoningRoomScene {
     }
   }
 
-  // ── 정령 스택 렌더 (같은 속성+등급 묶기) ──
+  // ── 정령 스택 렌더 (같은 속성+등급 묶기 + 삭제 버튼) ──
   _renderSpiritStacks(spirits) {
     if (spirits.length === 0) return '';
     const stacks = {};
     for (const s of spirits) {
       const key = `${s.key || s.name}_${s.rarity}`;
-      if (!stacks[key]) stacks[key] = { spirit: s, count: 0 };
+      if (!stacks[key]) stacks[key] = { spirit: s, count: 0, ids: [] };
       stacks[key].count++;
+      stacks[key].ids.push(s.id);
     }
-    return Object.values(stacks).map(({ spirit, count }) => {
+    return Object.values(stacks).map(({ spirit, count, ids }) => {
       const rColor = RARITY_COLORS[spirit.rarity] || '#86efac';
-      return `<div class="spirit-slot filled" style="border-color:${rColor};position:relative;" title="${spirit.name} (${RARITY_NAMES[spirit.rarity] || spirit.rarity})${spirit.ability ? '\n' + spirit.ability.description : ''}">
+      const firstId = ids[0];
+      return `<div class="spirit-slot filled" style="border-color:${rColor};position:relative;cursor:pointer;" title="${spirit.name} (${RARITY_NAMES[spirit.rarity] || spirit.rarity})${spirit.ability ? '\n' + spirit.ability.description : ''}\n클릭: 삭제" data-spirit-id="${firstId}" data-spirit-key="${spirit.key || spirit.name}" data-spirit-rarity="${spirit.rarity}">
         ${spirit.emoji}
         ${count > 1 ? `<span style="position:absolute;top:-4px;right:-4px;background:${rColor};color:#000;font-size:10px;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-weight:700;">×${count}</span>` : ''}
+        <span class="spirit-delete-badge" style="position:absolute;bottom:-4px;right:-4px;background:#ff4444;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer;">✕</span>
       </div>`;
     }).join('');
   }
@@ -288,6 +303,9 @@ export default class SummoningRoomScene {
     };
     GameState.summonSpirit(spirit);
 
+    // HeroAI 자동 등록 (주인공 흡수)
+    this._absorbSpiritToHero(spirit);
+
     // 소환 연출
     this._showSummonReveal(spirit);
   }
@@ -309,6 +327,7 @@ export default class SummoningRoomScene {
 
       const spirit = { ...resultSpirit, id: Date.now() + summoned.length, level: 1, exp: 0 };
       GameState.summonSpirit(spirit);
+      this._absorbSpiritToHero(spirit);
       summoned.push(spirit);
     }
 
@@ -353,6 +372,10 @@ export default class SummoningRoomScene {
     const rarityInfo = getRarityInfo(rarityId);
     const badgeClass = ({common:'green',rare:'purple',magic:'cyan',epic:'gold',legendary:'red'})[spirit.rarity] || 'green';
 
+    // 흡수 보너스 표시
+    const atkBonus = spirit.stats?.attack || 10;
+    const defBonus = spirit.defense || 1;
+
     const overlay = document.createElement('div');
     overlay.className = 'summon-reveal';
     overlay.innerHTML = `
@@ -364,10 +387,16 @@ export default class SummoningRoomScene {
         </span>
       </div>
       <div style="font-size:0.85em;margin-top:8px;">
-        방어: ${spirit.defense || 1} | 공격: ${spirit.spiritAtk || spirit.stats?.attack || 10} | 공속: ${spirit.spiritAtkSpeed || 2.0}초
+        방어: ${defBonus} | 공격: ${atkBonus} | 공속: ${spirit.spiritAtkSpeed || 2.0}초
       </div>
       ${spirit.ability ? `<div style="margin-top:4px;font-size:0.85em;color:var(--gold);">${spirit.ability.name}: ${spirit.ability.description}</div>` : ''}
-      <button class="btn btn-primary" style="margin-top:24px;" id="reveal-close">확인</button>
+      <div style="margin-top:12px;padding:8px 12px;background:rgba(100,255,150,0.15);border:1px solid rgba(100,255,150,0.4);border-radius:8px;">
+        <div style="font-size:0.95em;color:#66ffaa;font-weight:700;">🧚 주인공에게 흡수!</div>
+        <div style="font-size:0.8em;color:var(--text-secondary);margin-top:4px;">
+          ATK +${atkBonus} | DEF +${defBonus} | 전투 중 자동 공격
+        </div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:16px;" id="reveal-close">확인</button>
     `;
     document.body.appendChild(overlay);
 
@@ -407,6 +436,81 @@ export default class SummoningRoomScene {
       overlay.remove();
       const c = this.el.querySelector('#summoning-container');
       if (c) this._renderContent(c);
+    };
+  }
+
+  // ── 정령 → 주인공 흡수 (소환 시 자동 호출) ──
+  _absorbSpiritToHero(spirit) {
+    if (typeof HeroAI === 'undefined') return;
+
+    const elementMap = {
+      fairy:'light', mushroom:'earth', candy:'light', water:'water',
+      diamond:'ice', star:'light', moon:'dark', thunder:'thunder',
+      blossom:'grass', crystal:'ice', rainbow:'fire', fire:'fire',
+      ice:'ice', cosmos:'dark', phoenix_lord:'fire', void_dragon:'dark',
+    };
+
+    const aiSpirit = HeroAI.createSpirit({
+      id: 'spirit_' + spirit.id,
+      name: spirit.name || '정령',
+      element: elementMap[spirit.key] || spirit.attribute || 'light',
+      rarity: spirit.rarity || 'common',
+      level: spirit.level || 1,
+      skill: spirit.ability?.type === 'aoe' ? 'spirit_burst'
+           : spirit.ability?.type === 'heal' ? 'water_spirit_shield'
+           : spirit.ability?.type === 'beam' ? 'thunder_spirit_chain'
+           : 'fire_spirit_strike',
+      uses: 1,
+    });
+    HeroAI.addSpirit(aiSpirit);
+    HeroAI.party._calculated = false; // 다음 calculateAll() 시 재계산
+
+    // HeroAIVisual 소환 연출
+    if (typeof HeroAIVisual !== 'undefined') {
+      HeroAIVisual.playSpiritSummon(aiSpirit, null);
+    }
+
+    console.log(`[HeroAI] 정령 "${spirit.name}" → 주인공 흡수 완료`);
+  }
+
+  // ── 정령 삭제 (소환 해제) ──
+  _deleteSpirit(spiritId, spiritKey, spiritRarity, container) {
+    const spirit = GameState.spirits.find(s => s.id === spiritId);
+    if (!spirit) return;
+
+    const name = spirit.name || spiritKey || '정령';
+
+    // 확인 팝업
+    const overlay = document.createElement('div');
+    overlay.className = 'summon-reveal';
+    overlay.style.zIndex = '10000';
+    overlay.innerHTML = `
+      <div style="font-size:50px;">${spirit.emoji || '✨'}</div>
+      <div style="font-size:1.1em;font-weight:700;margin:8px 0;color:#ff6b6b;">정령 해방</div>
+      <div style="font-size:0.9em;color:var(--text-secondary);margin-bottom:8px;">
+        "${name}"을(를) 해방하시겠습니까?<br>
+        <span style="color:#ff4444;font-size:0.85em;">해방된 정령은 소환의 나무로 돌아갑니다</span>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+        <button class="btn btn-secondary btn-sm" id="del-cancel">취소</button>
+        <button class="btn btn-sm" style="background:#ff4444;color:#fff;" id="del-confirm">해방</button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#del-cancel').onclick = () => overlay.remove();
+    overlay.querySelector('#del-confirm').onclick = () => {
+      // GameState에서 제거
+      GameState.spirits = GameState.spirits.filter(s => s.id !== spiritId);
+      // HeroAI에서도 제거
+      if (typeof HeroAI !== 'undefined') {
+        HeroAI.consumeSpirit('spirit_' + spiritId);
+        HeroAI.party._calculated = false;
+      }
+      overlay.remove();
+      showToast(`🌳 ${name} 해방! 소환의 나무로 돌아갔습니다`);
+      // 화면 갱신
+      if (container) this._renderContent(container);
     };
   }
 
