@@ -1236,7 +1236,7 @@ export default class CandyMatch {
       this.isProcessing = true;
       try {
         this._render();
-        await this._wait(150);
+        await this._wait(167);
         await this._resolveMatches();
       } catch (err) {
         console.error('[CandyMatch] resolve error:', err);
@@ -1569,7 +1569,7 @@ export default class CandyMatch {
         this._updateBoardDOM({ exploding: triggeredExtra });
         this.score += triggeredExtra.size * 20;
         showScoreFloat(triggeredExtra.size * 20);
-        await this._wait(350);
+        await this._wait(389);
         if (this._destroyed) return;
       }
 
@@ -1586,14 +1586,14 @@ export default class CandyMatch {
           this._updateBoardDOM({ exploding: purgeExtra });
           this.score += purgeExtra.size * 15;
           showScoreFloat(purgeExtra.size * 15);
-          await this._wait(500);
+          await this._wait(556);
           if (this._destroyed) return;
         }
       }
 
       // --- Phase 1.5d: Clear exploded cells visually ---
       this._updateBoardDOM({ cleared: matchedSet });
-      await this._wait(100);
+      await this._wait(111);
 
       if (this._destroyed) return;
 
@@ -1605,7 +1605,7 @@ export default class CandyMatch {
         falling: new Set(fallenCells),
         newTile: new Set(newCells)
       });
-      await this._wait(350);
+      await this._wait(389);
 
       if (this._destroyed) return;
     }

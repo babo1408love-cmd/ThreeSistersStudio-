@@ -153,7 +153,7 @@
 
 /* Match explosion animation */
 .candy-cell.exploding {
-  animation: gemExplode 0.4s ease-out forwards;
+  animation: gemExplode 0.44s ease-out forwards;
   pointer-events: none;
   z-index: 2;
 }
@@ -167,7 +167,7 @@
 
 /* Gravity fall animation */
 .candy-cell.gem-falling {
-  animation: gemFall 0.3s ease-in;
+  animation: gemFall 0.33s ease-in;
 }
 
 @keyframes gemFall {
@@ -177,7 +177,7 @@
 
 /* New tile appearing from top */
 .candy-cell.gem-new {
-  animation: gemNew 0.3s ease-out;
+  animation: gemNew 0.33s ease-out;
 }
 
 @keyframes gemNew {
@@ -229,7 +229,7 @@
   100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
 }
 
-.candy-cell.matched { animation: pop 0.4s forwards; }
+.candy-cell.matched { animation: pop 0.44s forwards; }
 
 /* P&D: Floating orb following cursor */
 .pad-floating-orb {
