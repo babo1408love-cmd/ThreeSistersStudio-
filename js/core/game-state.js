@@ -88,6 +88,23 @@ const GameState = {
     enemiesDefeated: 0
   },
 
+  // 초보자 도우미 (세계의 어머니)
+  firstPlayDate: null,       // 첫 플레이 시각 (timestamp)
+  helperDismissed: false,    // 도우미 수동 해제 여부
+
+  // 초보자 도우미: 첫 플레이 시각 기록
+  initFirstPlay() {
+    if (this.firstPlayDate === null) {
+      this.firstPlayDate = Date.now();
+    }
+  },
+
+  // 초보자 도우미: 수동 해제
+  dismissHelper() {
+    this.helperDismissed = true;
+    EventBus.emit('helper:dismissed');
+  },
+
   // Reset stage progress for a new stage
   resetStageProgress() {
     this.stageProgress = {
@@ -305,6 +322,8 @@ const GameState = {
       stats: { ...this.stats },
       summonTree: this.summonTree,
       heroUpgrade: this.heroUpgrade,
+      firstPlayDate: this.firstPlayDate,
+      helperDismissed: this.helperDismissed,
     };
   },
 
@@ -352,6 +371,8 @@ const GameState = {
       stats: data.stats ?? this.stats,
       summonTree: data.summonTree ?? null,
       heroUpgrade: data.heroUpgrade ?? null,
+      firstPlayDate: data.firstPlayDate ?? null,
+      helperDismissed: data.helperDismissed ?? false,
     });
     EventBus.emit('state:loaded');
   },
@@ -381,6 +402,8 @@ const GameState = {
     this.heroUpgrade = null;
     this.checkpoint = null;
     this.stats = { totalGold: 0, stagesCleared: 0, spiritsSummoned: 0, enemiesDefeated: 0 };
+    this.firstPlayDate = null;
+    this.helperDismissed = false;
     EventBus.emit('state:reset');
   }
 };

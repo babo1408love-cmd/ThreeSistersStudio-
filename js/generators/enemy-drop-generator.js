@@ -6,16 +6,16 @@
 
 // ── 슬라임 적 10종 (귀여운 둥근) ──
 export const ENEMIES = {
-  pink_slime:   {id:'pink_slime',  name:'핑크 슬라임', emoji:'🩷',color:'#FF69B4',hp:50,atk:5, def:2, spd:1.5,gold:5, rarity:'common'},
-  blue_slime:   {id:'blue_slime',  name:'파란 슬라임', emoji:'💙',color:'#4488FF',hp:60,atk:6, def:3, spd:1.2,gold:7, rarity:'common'},
-  green_slime:  {id:'green_slime', name:'초록 슬라임', emoji:'💚',color:'#44BB44',hp:55,atk:5, def:4, spd:1.3,gold:6, rarity:'common'},
-  purple_slime: {id:'purple_slime',name:'보라 슬라임', emoji:'💜',color:'#9944CC',hp:70,atk:7, def:3, spd:1.4,gold:8, rarity:'rare'},
-  gold_slime:   {id:'gold_slime',  name:'금색 슬라임', emoji:'💛',color:'#FFD700',hp:100,atk:8,def:5, spd:1.0,gold:50,rarity:'rare'},
-  fire_slime:   {id:'fire_slime',  name:'불 슬라임',   emoji:'🔥',color:'#FF4500',hp:65,atk:9, def:2, spd:1.6,gold:10,rarity:'rare'},
-  ice_slime:    {id:'ice_slime',   name:'얼음 슬라임', emoji:'❄️',color:'#00CED1',hp:60,atk:6, def:6, spd:0.9,gold:9, rarity:'rare'},
-  dark_slime:   {id:'dark_slime',  name:'어둠 슬라임', emoji:'🖤',color:'#333',   hp:80,atk:10,def:4, spd:1.5,gold:12,rarity:'magic'},
-  nature_slime: {id:'nature_slime',name:'자연 슬라임', emoji:'🌿',color:'#228B22',hp:70,atk:5, def:5, spd:1.1,gold:8, rarity:'common', healer:true,healAmt:3},
-  crystal_slime:{id:'crystal_slime',name:'수정 슬라임',emoji:'💎',color:'#c084fc',hp:90,atk:8, def:7, spd:0.8,gold:15,rarity:'magic'},
+  pink_slime:   {id:'pink_slime',  name:'핑크 슬라임', emoji:'🩷',color:'#FF69B4',hp:30,atk:4, def:1, spd:1.5,gold:5, rarity:'common'},
+  blue_slime:   {id:'blue_slime',  name:'파란 슬라임', emoji:'💙',color:'#4488FF',hp:40,atk:5, def:2, spd:1.2,gold:7, rarity:'common'},
+  green_slime:  {id:'green_slime', name:'초록 슬라임', emoji:'💚',color:'#44BB44',hp:35,atk:4, def:2, spd:1.3,gold:6, rarity:'common'},
+  purple_slime: {id:'purple_slime',name:'보라 슬라임', emoji:'💜',color:'#9944CC',hp:50,atk:6, def:2, spd:1.4,gold:8, rarity:'rare'},
+  gold_slime:   {id:'gold_slime',  name:'금색 슬라임', emoji:'💛',color:'#FFD700',hp:70,atk:6, def:3, spd:1.0,gold:50,rarity:'rare'},
+  fire_slime:   {id:'fire_slime',  name:'불 슬라임',   emoji:'🔥',color:'#FF4500',hp:45,atk:7, def:1, spd:1.6,gold:10,rarity:'rare'},
+  ice_slime:    {id:'ice_slime',   name:'얼음 슬라임', emoji:'❄️',color:'#00CED1',hp:40,atk:5, def:4, spd:0.9,gold:9, rarity:'rare'},
+  dark_slime:   {id:'dark_slime',  name:'어둠 슬라임', emoji:'🖤',color:'#333',   hp:60,atk:8, def:3, spd:1.5,gold:12,rarity:'magic'},
+  nature_slime: {id:'nature_slime',name:'자연 슬라임', emoji:'🌿',color:'#228B22',hp:45,atk:4, def:3, spd:1.1,gold:8, rarity:'common', healer:true,healAmt:3},
+  crystal_slime:{id:'crystal_slime',name:'수정 슬라임',emoji:'💎',color:'#c084fc',hp:65,atk:7, def:4, spd:0.8,gold:15,rarity:'magic'},
 };
 
 // ── 보스 4종 (거대 슬라임 3배 크기) ──
@@ -111,16 +111,16 @@ export function generateWave(waveNum, stageLevel = 1) {
   let pool, count;
   if (waveNum === 1) {
     pool = ['pink_slime'];
-    count = 5;
+    count = 3;
   } else if (waveNum === 2) {
-    pool = ['pink_slime','blue_slime','green_slime','purple_slime'];
-    count = 8;
+    pool = ['pink_slime','blue_slime','green_slime'];
+    count = 4;
   } else if (waveNum === 3) {
     pool = ['pink_slime','blue_slime','green_slime','purple_slime','gold_slime'];
-    count = 10;
+    count = 6;
   } else {
     pool = enemyKeys;
-    count = 8 + waveNum;
+    count = 5 + waveNum;
   }
 
   const enemies = [];
@@ -150,9 +150,10 @@ export function generateWave(waveNum, stageLevel = 1) {
 
   // 5웨이브마다 미니보스
   let boss = null;
-  if (waveNum % 5 === 0) {
+  if (waveNum > 0 && waveNum % 5 === 0) {
     const bossKeys = Object.keys(BOSSES);
-    const bossKey = bossKeys[Math.floor(waveNum / 5 - 1) % bossKeys.length];
+    const idx = ((Math.floor(waveNum / 5) - 1) % bossKeys.length + bossKeys.length) % bossKeys.length;
+    const bossKey = bossKeys[idx];
     const b = BOSSES[bossKey];
     boss = {
       ...b,

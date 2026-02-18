@@ -32,8 +32,8 @@ export const PART_DROP_CONFIG = {
 
 // --- 정령 소환 규칙 ---
 export const SUMMON_RULES = {
-  // 소환에 필요한 파츠 수: 6개 부위 각 1개씩
-  requiredParts: 6,
+  // 소환에 필요한 파츠 수: 3개 부위면 소환 가능 (아무 3부위 조합)
+  requiredParts: 3,
   requiredPartKeys: ['head', 'body', 'arms', 'wings', 'legs', 'shoes'],
 
   // 등급 제한: 없음! 다른 등급 파츠를 섞어도 소환 가능
@@ -78,19 +78,20 @@ export function autoMatchParts(spiritItems) {
     byPart[key] = spiritItems.filter(item => item.part === key);
   }
 
-  // 2. 모든 부위가 최소 1개씩 있는지 확인
-  const canSummon = PART_KEYS.every(key => byPart[key].length > 0);
-  if (!canSummon) {
+  // 2. 최소 3개 서로 다른 부위가 있는지 확인
+  const availableParts = PART_KEYS.filter(key => byPart[key].length > 0);
+  if (availableParts.length < SUMMON_RULES.requiredParts) {
     const missing = PART_KEYS.filter(key => byPart[key].length === 0);
     return {
       success: false,
       missing,
-      message: `부족한 파츠: ${missing.map(k => SPIRIT_PARTS.find(p => p.key === k)?.name).join(', ')}`,
+      collected: availableParts.length,
+      required: SUMMON_RULES.requiredParts,
+      message: `파츠 ${availableParts.length}/${SUMMON_RULES.requiredParts}개 — 부족: ${missing.map(k => SPIRIT_PARTS.find(p => p.key === k)?.name).join(', ')}`,
     };
   }
 
   // 3. 같은 정령 파츠 우선 매칭 시도
-  // 각 정령별로 가지고 있는 부위를 카운트
   const spiritPartCounts = {};
   for (const item of spiritItems) {
     if (!spiritPartCounts[item.spiritKey]) spiritPartCounts[item.spiritKey] = new Set();
@@ -107,26 +108,35 @@ export function autoMatchParts(spiritItems) {
     }
   }
 
-  // 4. 매칭 구성: 우선 bestSpiritKey의 파츠 사용, 부족분은 아무 파츠로 채움
+  // 4. 매칭 구성: 보유한 부위 중 requiredParts개만 선택 (우선 bestSpiritKey)
   const selected = [];
   const usedIds = new Set();
 
-  for (const partKey of PART_KEYS) {
+  // 보유 부위 중 requiredParts개 선택 (같은 정령 파츠 우선)
+  const sortedParts = [...availableParts].sort((a, b) => {
+    const aHasBest = byPart[a].some(item => item.spiritKey === bestSpiritKey) ? 0 : 1;
+    const bHasBest = byPart[b].some(item => item.spiritKey === bestSpiritKey) ? 0 : 1;
+    return aHasBest - bHasBest;
+  });
+  const useParts = sortedParts.slice(0, SUMMON_RULES.requiredParts);
+
+  for (const partKey of useParts) {
     // 우선: 같은 정령 파츠
     let pick = byPart[partKey].find(item => item.spiritKey === bestSpiritKey && !usedIds.has(item.id));
     if (!pick) {
-      // 없으면: 아무 파츠 (등급 높은 것 우선)
       const rarityOrder = ['legendary', 'epic', 'magic', 'rare', 'common'];
       const sorted = [...byPart[partKey]]
         .filter(item => !usedIds.has(item.id))
         .sort((a, b) => rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity));
       pick = sorted[0];
     }
-    if (!pick) {
-      return { success: false, missing: [partKey], message: '파츠 매칭 실패' };
-    }
+    if (!pick) continue;
     selected.push(pick);
     usedIds.add(pick.id);
+  }
+
+  if (selected.length < SUMMON_RULES.requiredParts) {
+    return { success: false, missing: [], message: '파츠 매칭 실패' };
   }
 
   return {

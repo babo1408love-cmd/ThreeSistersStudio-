@@ -14,6 +14,7 @@ export default class Stage1Scene {
     this._stage = getStage(GameState.currentStage);
     this._subGame = null;
     this._diceSum = 0; // dice sum from candy phase → marble shots
+    GameState.initFirstPlay(); // 첫 플레이 시각 기록 (도우미 시스템용)
     GameState.resetStageProgress();
   }
 

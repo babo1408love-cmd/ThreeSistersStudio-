@@ -16,6 +16,7 @@ import { GOLDEN_MIMIC, generateMimicReward } from '../data/golden-mimic-config.j
 import { createSpiritPartItem } from '../data/spirit-parts-config.js';
 import { showMimicTutorialOnBoard, hasMimicTutorialSeen } from '../ui/mimic-tutorial.js';
 import { MATCH_TIERS, MATCH_SPIRIT_DROP, SPECIAL_TILE_SYSTEM, getMatchTier, rollSpiritRarityByTier } from '../data/match-tiers-config.js';
+import { MOTHER_OF_WORLD, isHelperActive, biasedGemIndex, getTileTarget } from '../data/beginner-helper-config.js';
 
 const GEMS = ['🧚', '🍄', '💎', '⭐', '🌈', '🍬'];
 const HERO_EMOJI = '🧚';
@@ -71,6 +72,16 @@ export default class CandyMatch {
     this._dragTimerId = null;
     this._dragTimeLeft = 0;
 
+    // 초보자 도우미 상태
+    this._helperActive = isHelperActive(GameState);
+    this._tilesDestroyed = 0;
+    this._helperMsg = MOTHER_OF_WORLD.dialogues.greeting;
+    if (this._helperActive) {
+      this.maxMoves += MOTHER_OF_WORLD.bonuses.extraMoves;
+      this.moves = this.maxMoves;
+      this._tileTarget = getTileTarget(GameState.currentStage);
+    }
+
     // Bind handlers (mouse + touch)
     this._onMouseMove = this._handleMouseMove.bind(this);
     this._onMouseUp = this._handleMouseUp.bind(this);
@@ -85,7 +96,9 @@ export default class CandyMatch {
     for (let r = 0; r < this.rows; r++) {
       this.board[r] = [];
       for (let c = 0; c < this.cols; c++) {
-        this.board[r][c] = Math.floor(Math.random() * GEMS.length);
+        this.board[r][c] = this._helperActive
+          ? biasedGemIndex(GEMS.length)
+          : Math.floor(Math.random() * GEMS.length);
       }
     }
 
@@ -287,7 +300,7 @@ export default class CandyMatch {
   _revealChestsSequentially(idx, chestKeys) {
     if (this._destroyed) return;
     if (idx >= chestKeys.length) {
-      this.score += 200;
+      GameState.addGold(200); // 보물상자 보너스 → 골드로 지급 (캔디 스코어 X)
       const area = this.container.querySelector('#chest-next-area');
       if (area) {
         area.innerHTML = `<button class="btn btn-primary btn-lg touch-btn" id="go-move-btn" style="animation:fadeIn .5s;"><span class="touch-icon">👆</span> 🧚 영웅 이동 시작!</button>`;
@@ -586,7 +599,11 @@ export default class CandyMatch {
         GameState.addGold(drop.value);
         break;
       case 'score':
-        this.score += drop.value;
+        if (this._introPhase) {
+          GameState.addGold(drop.value); // 인트로 중엔 골드로 전환
+        } else {
+          this.score += drop.value;
+        }
         showScoreFloat(drop.value);
         break;
       case 'potion':
@@ -726,6 +743,7 @@ export default class CandyMatch {
     if (btn) {
       btn.onclick = () => {
         this._introPhase = false;
+        this.score = 0; // 캔디 매치 스코어는 0부터 시작 (인트로 보너스는 골드로 지급됨)
         this._render();
       };
     }
@@ -830,8 +848,12 @@ export default class CandyMatch {
     if (this._destroyed) return;
     if (this._introPhase) { this._renderIntro(); return; }
 
-    const cleared = this.score >= this.targetScore;
-    const progress = Math.min(100, this.score / this.targetScore * 100);
+    const cleared = this._helperActive
+      ? this._tilesDestroyed >= this._tileTarget
+      : this.score >= this.targetScore;
+    const progress = this._helperActive
+      ? Math.min(100, this._tilesDestroyed / this._tileTarget * 100)
+      : Math.min(100, this.score / this.targetScore * 100);
     const totalCols = this.cols + 2;
     const totalRows = this.rows + 2;
     const cellSize = 40;
@@ -839,11 +861,29 @@ export default class CandyMatch {
     const ragePhase = this._getRagePhase();
     const ragePercent = Math.min(100, GameState.rageGauge);
 
+    // 도우미 활성 시 대사 업데이트
+    if (this._helperActive) {
+      if (cleared) this._helperMsg = MOTHER_OF_WORLD.dialogues.cleared;
+      else if (progress >= 80) this._helperMsg = MOTHER_OF_WORLD.dialogues.almostClear;
+    }
+
+    const infoText = this._helperActive
+      ? `🌍 타일 파괴: ${this._tilesDestroyed}/${this._tileTarget} | 남은 이동: ${this.moves} | 콤보: ${this.totalCombo}`
+      : `🍬 점수: ${this.score}/${this.targetScore} | 남은 이동: ${this.moves} | 콤보: ${this.totalCombo}`;
+
+    const helperBarHtml = this._helperActive ? `
+        <div class="helper-bar" id="helper-bar">
+          <span class="helper-emoji">🌍</span>
+          <span class="helper-msg">${this._helperMsg}</span>
+          <button class="helper-dismiss-btn" id="helper-dismiss">혼자 할래요</button>
+        </div>` : '';
+
     this.container.innerHTML = `
       <div class="candy-scene">
         <div class="scene-title" style="color:var(--pink);">🍬 캔디 매치!</div>
         <div class="scene-subtitle">보석을 드래그하여 이동! (8방향, ${this._dragMaxTime / 1000}초 제한)</div>
-        <div class="info-bar" id="candy-info">🍬 점수: ${this.score}/${this.targetScore} | 남은 이동: ${this.moves} | 콤보: ${this.totalCombo}</div>
+        ${helperBarHtml}
+        <div class="info-bar" id="candy-info">${infoText}</div>
         <div class="progress-bar" style="margin:0 auto 6px;">
           <div class="progress-fill" style="width:${progress}%"></div>
         </div>
@@ -869,7 +909,7 @@ export default class CandyMatch {
       grid-template-columns:repeat(${totalCols}, ${cellSize}px);
       grid-template-rows:repeat(${totalRows}, ${cellSize}px);
       gap:2px;justify-content:center;margin-bottom:var(--gap-md);
-      position:relative;user-select:none;
+      position:relative;user-select:none;touch-action:none;
     `;
 
     this._cellElements = {};
@@ -988,11 +1028,25 @@ export default class CandyMatch {
         for (let r = 0; r < this.rows; r++) {
           for (let c = 0; c < this.cols; c++) {
             if (this.board[r][c] >= 0) {
-              this.board[r][c] = Math.floor(Math.random() * GEMS.length);
+              this.board[r][c] = this._helperActive
+                ? biasedGemIndex(GEMS.length)
+                : Math.floor(Math.random() * GEMS.length);
             }
           }
         }
         this._removeInitialMatches();
+        if (this._helperActive) this._tilesDestroyed = 0;
+        this._render();
+      };
+    }
+
+    // 도우미 해제 버튼
+    const dismissBtn = this.container.querySelector('#helper-dismiss');
+    if (dismissBtn) {
+      dismissBtn.onclick = () => {
+        GameState.dismissHelper();
+        this._helperActive = false;
+        this._helperMsg = MOTHER_OF_WORLD.dialogues.farewell;
         this._render();
       };
     }
@@ -1078,7 +1132,10 @@ export default class CandyMatch {
   // --- P&D Drag (Puzzle & Dragons style) ---
 
   _handleMouseDown(r, c, e) {
-    if (this.isProcessing || this.moves <= 0 || this.score >= this.targetScore) return;
+    const isClearedCheck = this._helperActive
+      ? this._tilesDestroyed >= this._tileTarget
+      : this.score >= this.targetScore;
+    if (this.isProcessing || this.moves <= 0 || isClearedCheck) return;
     if (this._isSpecial(r, c)) return;
 
     this._dragging = true;
@@ -1093,7 +1150,7 @@ export default class CandyMatch {
   }
 
   _handleMouseMove(e) {
-    if (!this._dragging) return;
+    if (!this._dragging) { return; }
 
     if (this._floatingOrb) {
       this._floatingOrb.style.left = (e.clientX - 22) + 'px';
@@ -1339,7 +1396,9 @@ export default class CandyMatch {
             fallenCells.push(r + ',' + c);
           }
         } else {
-          this.board[r][c] = Math.floor(Math.random() * GEMS.length);
+          this.board[r][c] = this._helperActive
+            ? biasedGemIndex(GEMS.length)
+            : Math.floor(Math.random() * GEMS.length);
           newCells.push(r + ',' + c);
         }
         ri++;
@@ -1366,6 +1425,7 @@ export default class CandyMatch {
 
       chainCount++;
       totalMatchedCells += matchedKeys.length;
+      if (this._helperActive) this._tilesDestroyed += matchedKeys.length;
       this.comboCount++;
       this.totalCombo = Math.max(this.totalCombo, this.comboCount);
 
@@ -1423,6 +1483,7 @@ export default class CandyMatch {
       // --- 매치 단계 연출 (tier 2+) ---
       if (bestTier && bestTier.tier >= 2) {
         this._showMatchTierEffect(bestTier, bestGroup);
+        if (this._helperActive) this._helperMsg = MOTHER_OF_WORLD.dialogues.bigMatch;
       }
 
       await this._wait(bestTier && bestTier.tier >= 3 ? 550 : 420);
@@ -2068,9 +2129,14 @@ export default class CandyMatch {
   async _dropSpiritPartsFromMatch(tier, group) {
     if (this._destroyed || !tier) return;
 
-    // 드랍 확률 체크
+    // 드랍 확률 체크 (도우미 활성 시 +30%)
+    let dropChance = tier.spiritDropChance;
+    if (this._helperActive) dropChance += MOTHER_OF_WORLD.bonuses.spiritDropBonus * 100;
     const roll = Math.random() * 100;
-    if (roll > tier.spiritDropChance) return;
+    if (roll > dropChance) return;
+
+    // 도우미 활성 시 드랍 메시지
+    if (this._helperActive) this._helperMsg = MOTHER_OF_WORLD.dialogues.spiritDrop;
 
     // 드랍 개수: 기본 1 + 보너스
     const dropCount = 1 + (tier.spiritDropBonus || 0);
@@ -2359,7 +2425,9 @@ export default class CandyMatch {
         if (cellEl) {
           cellEl.classList.add('rage-tile-explode');
         }
-        this.board[r][c] = Math.floor(Math.random() * GEMS.length); // 새 타일로 교체
+        this.board[r][c] = this._helperActive
+          ? biasedGemIndex(GEMS.length)
+          : Math.floor(Math.random() * GEMS.length); // 새 타일로 교체
         clearedCount++;
         this.score += 10; // 타일당 보너스 점수
       }, delay);

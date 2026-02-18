@@ -26,6 +26,7 @@
   margin-bottom: var(--gap-md);
   position: relative;
   user-select: none;
+  touch-action: none;
 }
 
 /* Marble path tiles (board game path around candy grid) */
@@ -86,6 +87,7 @@
   border: 2px solid var(--border-subtle);
   transition: background 0.1s, border-color 0.1s, transform 0.1s, box-shadow 0.1s;
   user-select: none;
+  touch-action: none;
 }
 
 .candy-cell:hover {
@@ -1532,4 +1534,56 @@
 @keyframes slideUp {
   from { transform: translateX(-50%) translateY(0); opacity: 1; }
   to { transform: translateX(-50%) translateY(-100%); opacity: 0; }
+}
+
+/* ====================================================
+   세계의 어머니 도우미 바
+   ==================================================== */
+
+.helper-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, rgba(34,139,34,0.15), rgba(255,215,0,0.1));
+  border: 1px solid rgba(34,139,34,0.3);
+  border-radius: 12px;
+  margin-bottom: 6px;
+  animation: helperGlow 3s ease-in-out infinite;
+}
+
+.helper-emoji {
+  font-size: 28px;
+  animation: helperFloat 2s ease-in-out infinite;
+}
+
+.helper-msg {
+  flex: 1;
+  font-size: 13px;
+  color: #a7f3d0;
+}
+
+.helper-dismiss-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #ccc;
+  cursor: pointer;
+}
+
+.helper-dismiss-btn:hover {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+@keyframes helperFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes helperGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(34,139,34,0.2); }
+  50% { box-shadow: 0 0 16px rgba(34,139,34,0.4); }
 }

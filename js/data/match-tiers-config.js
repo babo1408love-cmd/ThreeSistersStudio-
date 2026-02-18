@@ -17,7 +17,7 @@ export const MATCH_TIERS = [
     // 점수 배율
     scoreMultiplier: 1.0,
     // 정령 파츠 드랍 확률 (%)
-    spiritDropChance: 30,
+    spiritDropChance: 60,
     // 연출
     animation: {
       type: 'sparkle',
@@ -43,7 +43,7 @@ export const MATCH_TIERS = [
       triggerEffect: 'clear_line',
     },
     scoreMultiplier: 1.5,
-    spiritDropChance: 50,
+    spiritDropChance: 80,
     animation: {
       type: 'line_flash',
       duration: 500,
@@ -69,7 +69,7 @@ export const MATCH_TIERS = [
       radius: 1,
     },
     scoreMultiplier: 2.0,
-    spiritDropChance: 70,
+    spiritDropChance: 100,
     animation: {
       type: 'explosion_burst',
       duration: 600,
