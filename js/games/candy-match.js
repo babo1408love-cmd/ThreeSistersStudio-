@@ -1731,6 +1731,7 @@ export default class CandyMatch {
     const idx = this._getHeroSlotIndex(r, c);
     const hero = GameState.heroSlots[idx] || null;
     const unlocked = isSlotUnlocked(idx, GameState.currentStage, GameState.heroLevel);
+    const slotNum = idx + 1; // 1-based display
 
     cell.className = 'board-hero-slot';
     cell.dataset.slotType = 'hero';
@@ -1744,15 +1745,17 @@ export default class CandyMatch {
       const rarityColor = RARITY_COLORS[hero.rarity] || '#9b8aff';
       const attr = ATTRIBUTES[hero.attribute];
       const attrEmoji = attr ? attr.emoji : '';
+      const heroLv = hero.level || 1;
       cell.innerHTML = `
         <span class="hero-slot-emoji">${hero.emoji}</span>
+        <span class="hero-slot-name" style="font-size:8px;color:${rarityColor};position:absolute;bottom:1px;left:50%;transform:translateX(-50%);white-space:nowrap;">${hero.name}</span>
         <span class="hero-slot-attr-badge" style="color:${attr?.color || '#fff'};">${attrEmoji}</span>
       `;
       cell.style.borderColor = rarityColor;
-      cell.title = `${hero.name} (${RARITY_NAMES[hero.rarity] || '일반'}) [${attr?.name || ''}]`;
+      cell.title = `영웅${slotNum}: ${hero.name} Lv.${heroLv} (${RARITY_NAMES[hero.rarity] || '일반'}) [${attr?.name || ''}]`;
     } else {
-      cell.innerHTML = `<span class="hero-slot-empty">${HERO_SLOT_CONFIG.display.emptySlotEmoji}</span>`;
-      cell.title = HERO_SLOT_CONFIG.display.emptySlotLabel;
+      cell.innerHTML = `<span class="hero-slot-empty" style="font-size:16px;">⚔️</span><span style="font-size:8px;color:#9b8aff;position:absolute;bottom:2px;left:50%;transform:translateX(-50%);">영웅${slotNum}</span>`;
+      cell.title = `영웅 ${slotNum} — 비어있음`;
     }
 
     cell.onclick = () => this._onHeroSlotClick(idx, hero, unlocked);
