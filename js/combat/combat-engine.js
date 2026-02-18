@@ -324,27 +324,28 @@ export default class CombatEngine {
     const playerPower = (this.player.attack * this.player.speed * 0.8) + (this.player.maxHp * 0.3) + (this.player.defense * 0.5);
     const wave = generateWave(this.currentWave, this.stageLevel, playerPower);
 
-    // Spawn enemies around player (4방향, 화면 바로 밖)
+    // 일반몹: 플레이어 뒤쪽(왼쪽) + 상하에서 등장
     wave.enemies.forEach((eDef, i) => {
-      const side = i % 4; // 4방향 균등 배분
+      const side = i % 3; // 뒤(좌), 위, 아래 — 정면(우) 제외
       let sx, sy;
-      const offset = 40 + Math.random() * 60; // 40~100px 밖
-      if (side === 0) { sx = this.player.x + this.W * 0.5 + offset; sy = this.player.y + (Math.random() - 0.5) * this.H; }
-      else if (side === 1) { sx = this.player.x - this.W * 0.5 - offset; sy = this.player.y + (Math.random() - 0.5) * this.H; }
-      else if (side === 2) { sx = this.player.x + (Math.random() - 0.5) * this.W; sy = this.player.y - this.H * 0.5 - offset; }
-      else { sx = this.player.x + (Math.random() - 0.5) * this.W; sy = this.player.y + this.H * 0.5 + offset; }
+      const offset = 40 + Math.random() * 60;
+      if (side === 0) { sx = this.player.x - this.W * 0.5 - offset; sy = this.player.y + (Math.random() - 0.5) * this.H; }
+      else if (side === 1) { sx = this.player.x + (Math.random() - 0.5) * this.W * 0.6; sy = this.player.y - this.H * 0.5 - offset; }
+      else { sx = this.player.x + (Math.random() - 0.5) * this.W * 0.6; sy = this.player.y + this.H * 0.5 + offset; }
 
-      // Clamp to map
       sx = Math.max(20, Math.min(this.map.mapW - 20, sx));
       sy = Math.max(20, Math.min(this.map.mapH - 20, sy));
       this.enemies.push(this._createEnemy(eDef, sx, sy));
     });
 
-    // Boss — 플레이어 전방에 등장
+    // 중간보스 — 정면(오른쪽)에서만 등장, 비선공 + 속도 1.5배
     if (wave.boss) {
-      const bx = Math.min(this.map.mapW - 50, this.player.x + this.W * 0.4);
+      const bx = Math.min(this.map.mapW - 50, this.player.x + this.W * 0.5 + 60);
       const by = this.player.y + (Math.random() - 0.5) * 100;
-      this.enemies.push(this._createEnemy(wave.boss, bx, by));
+      const bossEntity = this._createEnemy(wave.boss, bx, by);
+      bossEntity.passive = true;   // 비선공 플래그
+      bossEntity.fixedSpeedMul = 1.5; // 플레이어 속도의 1.5배 고정
+      this.enemies.push(bossEntity);
     }
   }
 
@@ -546,8 +547,10 @@ export default class CombatEngine {
         e.x = this.player.x + Math.cos(angle) * warpDist;
         e.y = this.player.y + Math.sin(angle) * warpDist;
       } else if (dist > e.radius + this.player.radius) {
-        // 근접 시스템: 원거리=주인공보다 빠름, 근거리=같은 속도
-        const spd = calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
+        // 고정 속도 배율이 있으면 그걸 사용, 없으면 근접 시스템
+        const spd = e.fixedSpeedMul
+          ? this.player.speed * e.fixedSpeedMul * (dt / 16)
+          : calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
         e.x += (dx / dist) * spd;
         e.y += (dy / dist) * spd;
       }
@@ -556,16 +559,18 @@ export default class CombatEngine {
       e.x = Math.max(0, Math.min(this.map.mapW, e.x));
       e.y = Math.max(0, Math.min(this.map.mapH, e.y));
 
-      // Contact damage
-      if (e.contactTimer === undefined) e.contactTimer = 0;
-      e.contactTimer -= dt;
-      if (dist < (e.radius || 14) + this.player.radius && e.contactTimer <= 0) {
-        this._damagePlayer(e.attack || e.atk || 5);
-        e.contactTimer = 1000;
+      // Contact damage — passive 몹은 선공 안 함
+      if (!e.passive) {
+        if (e.contactTimer === undefined) e.contactTimer = 0;
+        e.contactTimer -= dt;
+        if (dist < (e.radius || 14) + this.player.radius && e.contactTimer <= 0) {
+          this._damagePlayer(e.attack || e.atk || 5);
+          e.contactTimer = 1000;
+        }
       }
 
-      // 보스 원거리 공격 (3초 쿨타임, 사거리 400px 이내)
-      if (e.isBoss && dist < 400) {
+      // 보스 원거리 공격 (3초 쿨타임, 사거리 400px 이내) — passive 보스는 공격 안 함
+      if (e.isBoss && !e.passive && dist < 400) {
         if (!e._bossAtkTimer) e._bossAtkTimer = 0;
         e._bossAtkTimer -= dt;
         if (e._bossAtkTimer <= 0) {
@@ -595,8 +600,8 @@ export default class CombatEngine {
         }
       }
 
-      // 일반 적도 근거리에서 원거리 공격 (5초 쿨타임, rare 이상)
-      if (!e.isBoss && (e.rarity === 'rare' || e.rarity === 'magic' || e.rarity === 'epic' || e.rarity === 'legendary') && dist < 300 && dist > 80) {
+      // 일반 적도 근거리에서 원거리 공격 (5초 쿨타임, rare 이상) — passive 제외
+      if (!e.isBoss && !e.passive && (e.rarity === 'rare' || e.rarity === 'magic' || e.rarity === 'epic' || e.rarity === 'legendary') && dist < 300 && dist > 80) {
         if (!e._rangedAtkTimer) e._rangedAtkTimer = 1000 + Math.random() * 3000;
         e._rangedAtkTimer -= dt;
         if (e._rangedAtkTimer <= 0) {

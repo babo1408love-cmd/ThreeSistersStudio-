@@ -151,17 +151,27 @@ export default class SummoningRoomScene {
         </div>
       </div>
 
-      <div style="margin-bottom:16px;">
+      <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px;align-items:center;">
         <button class="btn ${canSummon ? 'btn-primary' : 'btn-disabled'} btn-lg" id="btn-summon"
           ${canSummon ? '' : 'disabled'} style="${canSummon ? 'animation:pulse 1.5s infinite;' : 'opacity:0.4;'}">
           🌳 정령 소환! (조각 6개)
         </button>
+        ${setsAvailable >= 2 && !spiritsFull ? `
+          <button class="btn btn-primary btn-lg" id="btn-summon-all"
+            style="background:linear-gradient(135deg,var(--purple),var(--gold));border:none;">
+            🌟 모두 소환! (${setsAvailable}회)
+          </button>
+        ` : ''}
       </div>
     `;
 
     const summonBtn = el.querySelector('#btn-summon');
     if (canSummon && summonBtn) {
       summonBtn.onclick = () => this._doAutoSummon();
+    }
+    const summonAllBtn = el.querySelector('#btn-summon-all');
+    if (summonAllBtn) {
+      summonAllBtn.onclick = () => this._doSummonAll();
     }
   }
 
@@ -276,6 +286,44 @@ export default class SummoningRoomScene {
 
     // 소환 연출
     this._showSummonReveal(spirit);
+  }
+
+  // ── 모두 소환 ──
+  async _doSummonAll() {
+    const maxSpirits = GameState.MAX_SPIRITS || 10;
+    const summoned = [];
+
+    while (GameState.spirits.length < maxSpirits) {
+      const matchResult = autoMatchParts(GameState.spiritItems);
+      if (!matchResult.success) break;
+
+      const resultSpirit = determineSummonResult(matchResult.selectedParts, SPIRITS);
+      if (!resultSpirit) break;
+
+      const usedIdSet = new Set(matchResult.usedIds);
+      GameState.spiritItems = GameState.spiritItems.filter(item => !usedIdSet.has(item.id));
+
+      const spirit = { ...resultSpirit, id: Date.now() + summoned.length, level: 1, exp: 0 };
+      GameState.summonSpirit(spirit);
+      summoned.push(spirit);
+    }
+
+    if (summoned.length === 0) {
+      showToast('소환할 조각이 부족합니다!');
+      return;
+    }
+
+    // 연쇄 소환 연출
+    for (let i = 0; i < summoned.length; i++) {
+      this._showSummonReveal(summoned[i]);
+      if (i < summoned.length - 1) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+
+    showToast(`🌟 ${summoned.length}마리 연속 소환 완료!`);
+    // 화면 갱신
+    setTimeout(() => this.render(), 1500);
   }
 
   // ── 펫 진화 ──
