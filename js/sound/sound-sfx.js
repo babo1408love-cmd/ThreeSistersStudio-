@@ -87,7 +87,37 @@ const SoundSFX = {
     const t = SE.ctx.currentTime;
     const combo = comboCount || 3;
 
-    // 콤보 레벨별 코드 (2반음씩 상승하는 화음)
+    // ── Lv5 (12+콤보): 폭탄 폭발음으로 완전 교체 ──
+    if (combo >= 12) {
+      const intensity = Math.min((combo - 12) * 0.05 + 0.3, 0.6);
+      // 저음 임팩트 (쿵)
+      const { osc: boom, env: boomE } = SE._osc('sine', 40 + combo * 2, t, intensity, SE.sfxGain);
+      boom.frequency.exponentialRampToValueAtTime(20, t + 0.4);
+      SE._adsr(boomE.gain, t, 0.003, 0.06, 0.5, 0.15, 0.2, 0.4);
+      // 노이즈 폭발 (콰광)
+      const { source: n1, env: n1E } = SE._noise(t + 0.01, intensity * 0.8, SE.sfxGain);
+      SE._adsr(n1E.gain, t + 0.01, 0.005, 0.08, 0.3, 0.15, 0.15, 0.35);
+      // 중저음 잔향 (우르르)
+      const { osc: rumble, env: rumE } = SE._osc('sawtooth', 55, t + 0.05, intensity * 0.3, SE.sfxGain);
+      rumble.frequency.exponentialRampToValueAtTime(30, t + 0.5);
+      SE._adsr(rumE.gain, t + 0.05, 0.01, 0.1, 0.2, 0.2, 0.15, 0.5);
+      // 콤보 높을수록 2차 폭발 추가 (14+)
+      if (combo >= 14) {
+        const { source: n2, env: n2E } = SE._noise(t + 0.15, intensity * 0.6, SE.sfxGain);
+        SE._adsr(n2E.gain, t + 0.15, 0.005, 0.06, 0.25, 0.1, 0.12, 0.3);
+        const { osc: b2, env: b2E } = SE._osc('sine', 50, t + 0.15, intensity * 0.5, SE.sfxGain);
+        b2.frequency.exponentialRampToValueAtTime(25, t + 0.5);
+        SE._adsr(b2E.gain, t + 0.15, 0.005, 0.08, 0.3, 0.15, 0.15, 0.35);
+      }
+      // 16+ 3차 폭발 연쇄
+      if (combo >= 16) {
+        const { source: n3, env: n3E } = SE._noise(t + 0.3, intensity * 0.5, SE.sfxGain);
+        SE._adsr(n3E.gain, t + 0.3, 0.005, 0.05, 0.2, 0.1, 0.1, 0.25);
+      }
+      return;
+    }
+
+    // ── Lv1~4: 기존 화음 시스템 (2반음씩 상승) ──
     const baseNote = 60 + combo * 2; // MIDI C4 + 콤보×2반음
     const freq = 440 * Math.pow(2, (baseNote - 69) / 12);
 
@@ -120,7 +150,7 @@ const SoundSFX = {
       SE._adsr(gE.gain, t + 0.1, 0.01, 0.05, 0.2, 0.06, 0.1, 0.15);
     }
 
-    // Lv4 (9+콤보): 팡파르 + 심벌
+    // Lv4 (9-11콤보): 팡파르 + 심벌
     if (combo >= 9) {
       [0, 3, 7, 12, 15, 19, 24].forEach((semi, i) => {
         const nf = freq * Math.pow(2, semi / 12);

@@ -1652,7 +1652,9 @@ export default class CandyMatch {
         if (this._helperActive) this._helperMsg = MOTHER_OF_WORLD.dialogues.bigMatch;
       }
 
-      await this._wait(bestTier && bestTier.tier >= 3 ? 550 : 420);
+      // 콤보 속도 계수 — 콤보 높을수록 연출 대기 단축
+      const cSpd = Math.max(0.15, 0.7 - (this.comboCount - 1) * 0.08);
+      await this._wait(Math.round((bestTier && bestTier.tier >= 3 ? 550 : 420) * cSpd));
 
       // --- 매치 시 정령 파츠 드랍 ---
       if (bestTier && MATCH_SPIRIT_DROP.enabled) {
@@ -1686,7 +1688,7 @@ export default class CandyMatch {
         this._updateBoardDOM({ exploding: triggeredExtra });
         this.score += triggeredExtra.size * 20;
         showScoreFloat(triggeredExtra.size * 20);
-        await this._wait(389);
+        await this._wait(Math.round(389 * cSpd));
         if (this._destroyed) return;
       }
 
@@ -1704,14 +1706,14 @@ export default class CandyMatch {
           this._updateBoardDOM({ exploding: purgeExtra });
           this.score += purgeExtra.size * 15;
           showScoreFloat(purgeExtra.size * 15);
-          await this._wait(556);
+          await this._wait(Math.round(556 * cSpd));
           if (this._destroyed) return;
         }
       }
 
       // --- Phase 1.5d: Clear exploded cells visually ---
       this._updateBoardDOM({ cleared: matchedSet });
-      await this._wait(111);
+      await this._wait(Math.round(111 * cSpd));
 
       if (this._destroyed) return;
 
@@ -1723,7 +1725,7 @@ export default class CandyMatch {
         falling: new Set(fallenCells),
         newTile: new Set(newCells)
       });
-      await this._wait(389);
+      await this._wait(Math.round(389 * cSpd));
 
       if (this._destroyed) return;
     }
@@ -2468,6 +2470,9 @@ export default class CandyMatch {
     // 2-3: Lv1, 4-5: Lv2, 6-7: Lv3, 8+: Lv4
     const lv = combo >= 8 ? 4 : combo >= 6 ? 3 : combo >= 4 ? 2 : 1;
 
+    // ── 속도 계수: 콤보 높을수록 빨라짐 (2콤보=0.7x, 8+콤보=0.15x) ──
+    const speedFactor = Math.max(0.15, 0.7 - (combo - 2) * 0.08);
+
     // ── 색상 (콤보 레벨별) ──
     const colors = ['#86efac', '#67e8f9', '#a78bfa', '#fbbf24'];
     const color = colors[lv - 1];
@@ -2475,14 +2480,15 @@ export default class CandyMatch {
     // ── 보드 글로우 (Lv1+) ──
     const glowIntensity = Math.min(20 + lv * 10, 50);
     wrapper.style.boxShadow = `0 0 ${glowIntensity}px ${glowIntensity / 2}px ${color}`;
-    setTimeout(() => { wrapper.style.boxShadow = ''; }, 300 + lv * 100);
+    setTimeout(() => { wrapper.style.boxShadow = ''; }, (300 + lv * 100) * speedFactor);
 
     // ── 흔들림 (Lv2+) ──
     if (lv >= 2) {
       const intensity = lv * 2;
-      wrapper.style.animation = `comboShake ${0.1 + 0.05 * lv}s ease ${Math.ceil(lv * 1.5)}`;
+      const shakeDur = (0.1 + 0.05 * lv) * speedFactor;
+      wrapper.style.animation = `comboShake ${shakeDur}s ease ${Math.ceil(lv * 1.5)}`;
       wrapper.style.setProperty('--shake-px', intensity + 'px');
-      setTimeout(() => { wrapper.style.animation = ''; }, 200 + lv * 100);
+      setTimeout(() => { wrapper.style.animation = ''; }, (200 + lv * 100) * speedFactor);
     }
 
     // ── 파티클 폭발 (Lv1+, 개수 증가) ──
@@ -2500,10 +2506,11 @@ export default class CandyMatch {
       const dist = 50 + lv * 20 + Math.random() * 40;
       p.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
       p.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
-      p.style.animationDelay = (i * 20) + 'ms';
-      p.style.animationDuration = (400 + lv * 100) + 'ms';
+      const pDur = (400 + lv * 100) * speedFactor;
+      p.style.animationDelay = (i * 20 * speedFactor) + 'ms';
+      p.style.animationDuration = pDur + 'ms';
       document.body.appendChild(p);
-      setTimeout(() => p.remove(), 600 + lv * 150);
+      setTimeout(() => p.remove(), pDur + 100);
     }
 
     // ── 화면 플래시 (Lv3+) ──
@@ -2514,8 +2521,10 @@ export default class CandyMatch {
       flash.style.background = lv >= 4
         ? `radial-gradient(circle, #fbbf24${alpha}, #f472b6${alpha}, transparent 70%)`
         : `radial-gradient(circle, ${color}${alpha}, transparent 70%)`;
+      const flashDur = (400 + lv * 50) * speedFactor;
+      flash.style.animationDuration = flashDur + 'ms';
       document.body.appendChild(flash);
-      setTimeout(() => flash.remove(), 400 + lv * 50);
+      setTimeout(() => flash.remove(), flashDur);
     }
 
     // ── 콤보 숫자 표시 (Lv2+) ──
@@ -2528,8 +2537,10 @@ export default class CandyMatch {
       num.style.fontSize = (24 + lv * 6) + 'px';
       num.style.color = color;
       num.style.textShadow = `0 0 ${lv * 4}px ${color}, 0 2px 4px rgba(0,0,0,0.5)`;
+      const numDur = (800 + lv * 100) * speedFactor;
+      num.style.animationDuration = numDur + 'ms';
       document.body.appendChild(num);
-      setTimeout(() => num.remove(), 800 + lv * 100);
+      setTimeout(() => num.remove(), numDur);
     }
   }
 
