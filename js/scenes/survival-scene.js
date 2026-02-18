@@ -77,6 +77,11 @@ class SurvivalEngine {
     });
     this.camera = { x: 0, y: 0 };
 
+    // HeroAI: 서바이벌 모드 입장 시 전체 계산
+    if (typeof HeroAI !== 'undefined' && !HeroAI.party._calculated) {
+      try { HeroAI.calculateAll(); } catch(e) { console.warn('[HeroAI] calculateAll 실패:', e); }
+    }
+
     // Player (맵 시작점 근처, 수직 중앙)
     const ps = GameState.player;
     this.player = {
@@ -89,7 +94,15 @@ class SurvivalEngine {
       shotCount: 1, pierce: 0, homing: false,
       emoji: GameState.heroAppearance?.emoji || '🧚',
       bobPhase: 0,
+      element: 'light',
     };
+    // HeroAI 파티 데이터에서 원소 가져오기
+    if (typeof HeroAI !== 'undefined' && HeroAI.party._calculated) {
+      const pd = window._heroAIPartyData;
+      if (pd && pd.heroes.length > 0) {
+        this.player.element = pd.heroes[0].element || 'light';
+      }
+    }
 
     // 슬롯 영웅 (최대 2, UnitFactory 경유)
     this.slotHeroes = GameState.heroSlots.filter(h => h != null).slice(0, 2)
@@ -399,6 +412,7 @@ class SurvivalEngine {
         source: 'player', radius: this.player.projSize,
         emoji: '✨', pierce: this.player.pierce,
         homing: this.player.homing, target: nearest,
+        element: this.player.element || 'light',
       });
     }
   }
@@ -425,6 +439,7 @@ class SurvivalEngine {
             vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
             damage: h.attack, source: 'ally', radius: 4,
             emoji: '⚡', pierce: 0, homing: false, target: null,
+            element: h.attribute || h.element || null,
           });
           h.atkTimer = h.atkSpeed;
         }
@@ -435,6 +450,7 @@ class SurvivalEngine {
   // ── Spirits ──
   _updateSpirits(dt) {
     const SPIRIT_PROJ = { fire:'🔥', water:'💧', lightning:'⚡', dark:'🌑', light:'✨', nature:'🌿', ice:'❄️', wind:'💨' };
+    const ATTR_TO_ELEM = { fire:'fire', water:'water', lightning:'thunder', dark:'dark', light:'light', nature:'grass', ice:'ice', wind:'thunder' };
     this.spirits.forEach(s => {
       s.orbitAngle += dt * 0.0015;
       const orbitR = 40 + (this.spirits.length > 6 ? 15 : 0);
@@ -457,6 +473,7 @@ class SurvivalEngine {
             damage: dmg, source: 'ally', radius: 3,
             emoji: SPIRIT_PROJ[s.attribute] || '✨',
             pierce: 0, homing: false, target: null,
+            element: ATTR_TO_ELEM[s.attribute] || s.attribute || null,
           });
           s.atkTimer = s.atkSpeed || 800;
         }
@@ -535,12 +552,22 @@ class SurvivalEngine {
           const e = this.enemies[i];
           if (e.purifyState !== PURIFY_STATE.NONE) continue;
           if (this._circleHit(p, e)) {
-            const dmg = Math.max(1, p.damage - e.defense * 0.3);
+            // HeroAI 원소 상성 적용
+            let elementMult = 1.0;
+            if (typeof HeroAI !== 'undefined' && p.element && e.element) {
+              const chart = HeroAI.ELEMENT_CHART[p.element];
+              if (chart) {
+                if (chart.strong.includes(e.element)) elementMult = 1.5;
+                else if (chart.weak.includes(e.element)) elementMult = 0.7;
+              }
+            }
+            const dmg = Math.max(1, (p.damage - e.defense * 0.3) * elementMult);
             e.hp -= dmg;
             this._spawnHitParticles(e.x, e.y, e.color);
+            const dmgColor = elementMult > 1 ? '#44ff88' : elementMult < 1 ? '#ff6666' : '#fbbf24';
             this.particles.push({
               x: e.x, y: e.y - e.radius - 5,
-              text: `-${Math.round(dmg)}`, color: '#fbbf24', type: 'text',
+              text: `-${Math.round(dmg)}`, color: dmgColor, type: 'text',
               life: 800, vy: -1, vx: (Math.random() - 0.5) * 0.5,
             });
             if (e.hp <= 0) {

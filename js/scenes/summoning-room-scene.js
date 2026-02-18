@@ -99,6 +99,10 @@ export default class SummoningRoomScene {
     container.querySelector('#btn-depart').onclick = () => {
       GameState.currentPhase = 'combat';
       GameState.fullHeal();
+
+      // HeroAI 파티 동기화 + 스탯 계산
+      this._syncHeroAI();
+
       SaveManager.saveCheckpoint();
       SaveManager.save();
       SceneManager.go('stage2');
@@ -404,6 +408,110 @@ export default class SummoningRoomScene {
       const c = this.el.querySelector('#summoning-container');
       if (c) this._renderContent(c);
     };
+  }
+
+  // ── HeroAI 파티 동기화 (출발 시 호출) ──
+  _syncHeroAI() {
+    if (typeof HeroAI === 'undefined') return;
+
+    // 파티 초기화
+    HeroAI.party.heroes = [];
+    HeroAI.party.spirits = [];
+    HeroAI.party.pet = null;
+    HeroAI.party._calculated = false;
+
+    // 영웅 등록 (heroSlots에서 — 최대 5명)
+    const elementMap = {
+      fairy:'light', mushroom:'earth', candy:'light', water:'water',
+      diamond:'ice', star:'light', moon:'dark', thunder:'thunder',
+      blossom:'grass', crystal:'ice', rainbow:'fire', fire:'fire',
+      ice:'ice', cosmos:'dark', phoenix_lord:'fire', void_dragon:'dark',
+    };
+    const classMap = {
+      common:'warrior', rare:'archer', magic:'mage',
+      epic:'rogue', legendary:'summoner',
+    };
+
+    GameState.heroSlots.filter(h => h != null).forEach(h => {
+      const hero = HeroAI.createHero({
+        id: 'hero_slot_' + (h.key || h.name || Date.now()),
+        name: h.name || '영웅',
+        class: classMap[h.rarity] || 'warrior',
+        element: elementMap[h.key] || h.attribute || 'fire',
+        rarity: h.rarity || 'common',
+        level: h.level || GameState.heroLevel || 1,
+        aiPersonality: 'balanced',
+        weapon: GameState.equipped.arms || null,
+        armor: GameState.equipped.body || null,
+      });
+      HeroAI.addHero(hero);
+    });
+
+    // 주인공 자체도 영웅 0번으로 등록 (항상)
+    if (HeroAI.party.heroes.length === 0) {
+      const mainHero = HeroAI.createHero({
+        id: 'hero_main',
+        name: '요정',
+        class: 'warrior',
+        element: 'light',
+        rarity: 'rare',
+        level: GameState.heroLevel || 1,
+        weapon: GameState.equipped.arms || null,
+        armor: GameState.equipped.body || null,
+        aiPersonality: 'balanced',
+      });
+      HeroAI.addHero(mainHero);
+    }
+
+    // 정령 등록 (소모품)
+    GameState.spirits.forEach(s => {
+      const spirit = HeroAI.createSpirit({
+        id: 'spirit_' + (s.id || Date.now()),
+        name: s.name || '정령',
+        element: elementMap[s.key] || s.attribute || 'light',
+        rarity: s.rarity || 'common',
+        level: s.level || 1,
+        skill: s.ability?.type === 'aoe' ? 'spirit_burst'
+             : s.ability?.type === 'heal' ? 'water_spirit_shield'
+             : s.ability?.type === 'beam' ? 'thunder_spirit_chain'
+             : 'fire_spirit_strike',
+        uses: 1,
+      });
+      HeroAI.addSpirit(spirit);
+    });
+
+    // 펫 등록
+    if (GameState.petSlot) {
+      const p = GameState.petSlot;
+      const pet = HeroAI.createPet({
+        id: 'pet_' + (p.name || Date.now()),
+        name: p.name || '펫',
+        type: p.type || 'cat',
+        element: p.attribute || 'light',
+        rarity: p.rarity || 'rare',
+        level: p.level || 1,
+        skill: 'pet_heal_lick',
+        passive: p.passive || 'luck_boost',
+      });
+      HeroAI.setPet(pet);
+    }
+
+    // 전체 스탯 계산
+    const partyData = HeroAI.calculateAll();
+
+    // 계산 결과를 GameState에 반영 (시너지+정령+펫 보너스 반영)
+    if (partyData && partyData.heroes.length > 0) {
+      const mainStats = partyData.heroes[0].stats;
+      // 보너스 스탯을 기존 플레이어 스탯에 가산
+      GameState.player.attack += Math.floor((mainStats.atk || 0) * 0.1);
+      GameState.player.defense += Math.floor((mainStats.def || 0) * 0.1);
+      GameState.player.maxHp += Math.floor((mainStats.hp || 0) * 0.05);
+      GameState.player.hp = GameState.player.maxHp;
+    }
+
+    // 글로벌에 파티 데이터 저장 (combat-engine/survival에서 참조)
+    window._heroAIPartyData = partyData;
+    console.log('[HeroAI] 파티 동기화 완료 — 총 전투력:', partyData?.totalPower || 0);
   }
 
   onEnter() {

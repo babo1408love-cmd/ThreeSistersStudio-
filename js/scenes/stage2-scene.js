@@ -64,6 +64,11 @@ export default class Stage2Scene {
   }
 
   _startCombat(canvas) {
+    // HeroAI: 스테이지 입장 직전 전체 계산 (소환의 방에서 안 왔을 경우 대비)
+    if (typeof HeroAI !== 'undefined' && !HeroAI.party._calculated) {
+      try { HeroAI.calculateAll(); } catch(e) { console.warn('[HeroAI] calculateAll 실패:', e); }
+    }
+
     // Determine wave count from stage
     const waveCount = this._stage.combat?.waves?.length || 4;
 

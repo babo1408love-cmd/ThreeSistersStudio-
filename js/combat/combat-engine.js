@@ -56,6 +56,16 @@ export default class CombatEngine {
     // Player (UnitFactory 경유)
     this.player = UnitFactory.createPlayerEntity(GameState, { mapH: this.map.mapH });
 
+    // HeroAI 파티 데이터 연동 — 원소 정보 + 시너지 보너스 적용
+    if (typeof HeroAI !== 'undefined' && HeroAI.party._calculated) {
+      const pd = window._heroAIPartyData;
+      if (pd && pd.heroes.length > 0) {
+        this.player.element = pd.heroes[0].element || 'light';
+      }
+    } else {
+      this.player.element = 'light';
+    }
+
     // Slot heroes (최대 2, UnitFactory 경유)
     this.slotHeroes = GameState.heroSlots.filter(h => h != null).slice(0, 2)
       .map((h, i) => UnitFactory.createAlly(h, { combatRole: 'slotHero', index: i, playerPos: this.player }));
@@ -396,7 +406,7 @@ export default class CombatEngine {
       h.x += (targetX - h.x) * 0.08;
       h.y += (targetY - h.y) * 0.08;
 
-      // Auto-attack
+      // Auto-attack (HeroBattleAI 원소 상성 지원)
       h.atkTimer -= dt;
       if (h.atkTimer <= 0 && this.enemies.length > 0) {
         const nearest = this._findNearest(h, this.enemies);
@@ -407,6 +417,7 @@ export default class CombatEngine {
             vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4,
             damage: h.attack, source: 'ally', radius: 4,
             emoji: '⚡', pierce: 0, homing: false, target: null,
+            element: h.attribute || h.element || null,
           });
           h.atkTimer = h.atkSpeed;
         }
@@ -419,6 +430,11 @@ export default class CombatEngine {
     const SPIRIT_PROJ_EMOJI = {
       fire:'🔥', water:'💧', lightning:'⚡', dark:'🌑',
       light:'✨', nature:'🌿', ice:'❄️', wind:'💨',
+    };
+    // 속성 → 원소 매핑 (HeroAI 원소 상성용)
+    const ATTR_TO_ELEMENT = {
+      fire:'fire', water:'water', lightning:'thunder', dark:'dark',
+      light:'light', nature:'grass', ice:'ice', wind:'thunder',
     };
 
     this.spirits.forEach(s => {
@@ -439,7 +455,7 @@ export default class CombatEngine {
           const projEmoji = SPIRIT_PROJ_EMOJI[s.attribute] || '✨';
           const projSpeed = 5 + s.rarity * 0.5;
 
-          // 미사일 발사! (실제 투사체 생성)
+          // 미사일 발사! (실제 투사체 생성 + 원소 정보)
           this.projectiles.push({
             x: s.x, y: s.y,
             vx: Math.cos(angle) * projSpeed,
@@ -452,6 +468,7 @@ export default class CombatEngine {
             homing: s.rarity >= 3, // 매직 이상은 호밍
             target: s.rarity >= 3 ? nearest : null,
             spiritName: s.name,
+            element: ATTR_TO_ELEMENT[s.attribute] || s.attribute || null,
           });
 
           // 발사 이펙트 (작은 반짝임)
@@ -521,6 +538,7 @@ export default class CombatEngine {
             pierce: this.player.pierce,
             homing: this.player.homing,
             target: this.player.homing ? nearest : null,
+            element: this.player.element || 'light',
           });
         }
         this.player.atkTimer = this.player.atkSpeed;
@@ -667,7 +685,16 @@ export default class CombatEngine {
         for (let i = this.enemies.length - 1; i >= 0; i--) {
           const e = this.enemies[i];
           if (this._circleHit(p, e)) {
-            const dmg = Math.max(1, p.damage - e.defense * 0.3);
+            // HeroBattleAI 원소 상성 적용
+            let elementMult = 1.0;
+            if (typeof HeroBattleAI !== 'undefined' && typeof HeroAI !== 'undefined' && p.element) {
+              const chart = HeroAI.ELEMENT_CHART[p.element];
+              if (chart && e.element) {
+                if (chart.strong.includes(e.element)) elementMult = 1.5;
+                else if (chart.weak.includes(e.element)) elementMult = 0.7;
+              }
+            }
+            const dmg = Math.max(1, (p.damage - e.defense * 0.3) * elementMult);
             e.hp -= dmg;
             this._spawnHitParticles(e.x, e.y, e.color);
             // 투사체 적중 효과음 (100ms 쓰로틀)
@@ -676,10 +703,12 @@ export default class CombatEngine {
               SoundSFX.projectileHit();
               this._lastHitSfx = now;
             }
-            // Damage number
+            // Damage number (원소 상성 색상: 효과적=초록, 저항=빨강, 일반=금색)
+            const dmgColor = elementMult > 1 ? '#44ff88' : elementMult < 1 ? '#ff6666' : '#fbbf24';
+            const dmgPrefix = elementMult > 1 ? '⚡' : elementMult < 1 ? '🛡️' : '';
             this.particles.push({
               x: e.x, y: e.y - e.radius - 5,
-              text: `-${Math.round(dmg)}`, color: '#fbbf24', type: 'text',
+              text: `${dmgPrefix}-${Math.round(dmg)}`, color: dmgColor, type: 'text',
               life: 800, vy: -1, vx: (Math.random() - 0.5) * 0.5,
             });
             if (e.hp <= 0) {
