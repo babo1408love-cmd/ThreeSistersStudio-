@@ -34,6 +34,7 @@ export default class CandyMatch {
     this.cols = options.cols || 7;
     this.rows = options.rows || 11;
     this.onComplete = options.onComplete || (() => {});
+    this.onTurnEnd = options.onTurnEnd || null; // 매 턴 종료 콜백
 
     this.board = [];
     this.moves = this.maxMoves;
@@ -51,7 +52,7 @@ export default class CandyMatch {
     this._dice = [0, 0];
     this._diceSum = 0;
     this._diceRolled = false;
-    this._introPhase = true;
+    this._introPhase = options.skipIntro ? false : true;
     this._introStep = 'dice'; // dice → chests → move → play
 
     // Marble path (board game path around candy grid)
@@ -87,6 +88,9 @@ export default class CandyMatch {
       this.moves = this.maxMoves;
       this._tileTarget = getTileTarget(GameState.currentStage);
     }
+
+    // 외부 잠금 (주사위/마블 진행 중 드래그 비활성화)
+    this._externalLock = false;
 
     // Bind handlers (mouse + touch)
     this._onMouseMove = this._handleMouseMove.bind(this);
@@ -1143,7 +1147,7 @@ export default class CandyMatch {
   // --- P&D Drag (Puzzle & Dragons style) ---
 
   _handleMouseDown(r, c, e) {
-    if (this.isProcessing || this.moves <= 0 || this._matchCount >= this._matchTarget) return;
+    if (this._externalLock || this.isProcessing || this.moves <= 0 || this._matchCount >= this._matchTarget) return;
     if (this._isSpecial(r, c)) return;
 
     this._dragging = true;
@@ -1221,6 +1225,7 @@ export default class CandyMatch {
 
     if (didMove) {
       this.moves--;
+      const prevMatchCount = this._matchCount;
       this.isProcessing = true;
       try {
         this._render();
@@ -1233,6 +1238,17 @@ export default class CandyMatch {
         if (!this._destroyed) {
           this.isProcessing = false;
           this._render();
+
+          // 턴 종료 콜백 (매치가 있었을 때만)
+          const matchesMade = this._matchCount - prevMatchCount;
+          if (this.onTurnEnd && matchesMade > 0) {
+            this.onTurnEnd({
+              matchCount: matchesMade,
+              totalMatches: this._matchCount,
+              combo: this.totalCombo,
+              cleared: this._matchCount >= this._matchTarget,
+            });
+          }
         }
       }
     } else {
@@ -2469,6 +2485,21 @@ export default class CandyMatch {
       if (rage >= p.threshold) current = p;
     }
     return current;
+  }
+
+  /** 외부에서 보드 잠금/해제 (주사위/마블 진행 중) */
+  setLocked(locked) {
+    this._externalLock = locked;
+  }
+
+  /** 현재 매치 수 조회 */
+  getMatchCount() {
+    return this._matchCount;
+  }
+
+  /** 클리어 여부 조회 */
+  isCleared() {
+    return this._matchCount >= this._matchTarget;
   }
 
   destroy() {

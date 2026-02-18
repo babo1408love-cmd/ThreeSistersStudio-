@@ -1587,3 +1587,238 @@
   0%, 100% { box-shadow: 0 0 8px rgba(34,139,34,0.2); }
   50% { box-shadow: 0 0 16px rgba(34,139,34,0.4); }
 }
+
+/* ====================================================
+   스테이지1 통합 레이아웃 (캔디→주사위→마블)
+   ==================================================== */
+
+#stage1-integrated {
+  text-align: center;
+  width: 100%;
+}
+
+/* 페이즈 표시 바 */
+.s1-phase-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  margin: 4px auto 2px;
+  max-width: 360px;
+}
+
+.s1-phase-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gold, #fbbf24);
+  animation: phasePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes phasePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* 캔디 영역 */
+.s1-candy-area {
+  width: 100%;
+}
+
+/* 주사위 영역 */
+.s1-dice-area {
+  margin: 4px auto;
+  max-width: 360px;
+}
+
+.dice-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(251,191,36,0.1), rgba(251,191,36,0.05));
+  border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 12px;
+  animation: diceGlow 2s ease-in-out infinite;
+}
+
+@keyframes diceGlow {
+  0%, 100% { box-shadow: 0 0 8px rgba(251,191,36,0.15); }
+  50% { box-shadow: 0 0 16px rgba(251,191,36,0.35); }
+}
+
+.dice-face {
+  font-size: 48px;
+  transition: transform 0.1s;
+}
+
+.dice-label {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--gold, #fbbf24);
+}
+
+/* 마블 보드 영역 */
+.s1-marble-area {
+  margin: 4px auto;
+  max-width: 360px;
+  overflow-x: auto;
+}
+
+.marble-strip {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  padding: 4px 8px;
+}
+
+.marble-tile {
+  min-width: 28px;
+  height: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(30, 35, 55, 0.8);
+  border: 1.5px solid rgba(100, 110, 130, 0.3);
+  position: relative;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.marble-tile-active {
+  background: rgba(251, 191, 36, 0.25) !important;
+  border-color: var(--gold, #fbbf24) !important;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+  transform: scale(1.1);
+  z-index: 2;
+}
+
+.marble-tile-visited {
+  opacity: 0.6;
+}
+
+.marble-tile-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.marble-player {
+  font-size: 10px;
+  position: absolute;
+  top: -2px;
+  right: -1px;
+}
+
+.marble-tile-idx {
+  font-size: 8px;
+  color: rgba(200, 210, 220, 0.4);
+  line-height: 1;
+}
+
+.marble-tile-bounce {
+  animation: marbleBounce 0.2s ease-out;
+}
+
+@keyframes marbleBounce {
+  0% { transform: scale(1.1) translateY(0); }
+  50% { transform: scale(1.15) translateY(-3px); }
+  100% { transform: scale(1.1) translateY(0); }
+}
+
+.marble-info {
+  font-size: 11px;
+  color: var(--text-secondary, #aaa);
+  padding: 2px 8px;
+  text-align: center;
+}
+
+/* 상태 바 */
+.s1-status-bar {
+  font-size: 12px;
+  color: var(--text-secondary, #aaa);
+  padding: 4px 12px;
+  text-align: center;
+  border-top: 1px solid rgba(100, 110, 130, 0.15);
+  margin-top: 4px;
+}
+
+/* ====================================================
+   마블 이벤트 팝업 오버레이
+   ==================================================== */
+
+.marble-event-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.marble-event-overlay.show {
+  opacity: 1;
+}
+
+.marble-event-card {
+  background: var(--bg-card, #1e2337);
+  border: 2px solid var(--border-glow, #555);
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 300px;
+  width: 85%;
+  text-align: center;
+  transform: scale(0.8);
+  transition: transform 0.2s ease;
+}
+
+.marble-event-overlay.show .marble-event-card {
+  transform: scale(1);
+}
+
+.marble-event-emoji {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.marble-event-title {
+  font-size: 1.2em;
+  font-weight: 800;
+  color: var(--gold, #fbbf24);
+  margin-bottom: 10px;
+}
+
+.marble-event-body {
+  font-size: 0.9em;
+  color: var(--text-secondary, #aaa);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.marble-event-btn {
+  margin-top: 8px;
+}
+
+/* 상점 아이템 버튼 */
+.shop-item-btn {
+  background: rgba(155, 138, 255, 0.1);
+  border: 1px solid rgba(155, 138, 255, 0.3);
+  color: var(--text-primary, #eee);
+  transition: all 0.2s;
+}
+
+.shop-item-btn:hover:not(:disabled) {
+  background: rgba(155, 138, 255, 0.2);
+  border-color: rgba(155, 138, 255, 0.5);
+}
+
+.shop-item-btn:disabled {
+  cursor: default;
+}
