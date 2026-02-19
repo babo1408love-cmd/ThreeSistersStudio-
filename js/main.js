@@ -3,6 +3,7 @@ import SceneManager from './core/scene-manager.js';
 import GameState from './core/game-state.js';
 import SaveManager from './core/save-manager.js';
 import EventBus from './core/event-bus.js';
+import HeroCore from './systems/hero-core.js';
 
 // Scenes
 import MainMenuScene from './scenes/main-menu.js';
@@ -89,6 +90,10 @@ function init() {
   if (window.TextI18n) {
     TextI18n.setLanguage('ko');
   }
+
+  // HeroCore 허브 초기화 — 모든 생성기·시스템이 주인공에 탑재
+  const heroCore = HeroCore.getInstance();
+  console.log('[Main] HeroCore 초기화:', heroCore.listMounted());
 
   // Register all scenes
   SceneManager.register('menu', MainMenuScene);

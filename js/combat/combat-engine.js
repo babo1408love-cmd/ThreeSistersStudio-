@@ -1,6 +1,9 @@
 /**
  * CombatEngine — 스테이지2 Canvas 횡스크롤 전투
  * 귀여운 슬라임, 자동공격, 업그레이드 드롭, 분노게이지, 펫회복
+ *
+ * HeroCore 허브 시스템 경유:
+ *   모든 생성기·시스템이 주인공에게 탑재되어 HeroCore를 통해 접근
  */
 import GameState from '../core/game-state.js';
 import EventBus from '../core/event-bus.js';
@@ -10,13 +13,9 @@ import { renderAttack, getSkillByTier } from '../generators/spirit-attack-genera
 import BossRoomSystem, { BOSS_ROOM_PHASE } from './boss-room-system.js';
 import AerialCombatSystem from './aerial-combat-system.js';
 import UnitFactory from '../data/unit-factory.js';
-import StageTimer from '../systems/stage-timer.js';
-import AutoScroll from '../systems/auto-scroll.js';
 import BossApproachSystem from '../systems/boss-approach.js';
-import AutoWalk from '../systems/auto-walk.js';
-import RageSystem from '../systems/rage-system.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
-import HeroEngine from '../systems/hero-engine.js';
+import HeroCore from '../systems/hero-core.js';
 import StageDirector from '../systems/stage-director.js';
 
 // ── 업그레이드 아이템 정의 ──
@@ -44,23 +43,27 @@ export default class CombatEngine {
     this.onVictory = options.onVictory || (() => {});
     this.onDeath = options.onDeath || (() => {});
 
-    // StageDirector 생성 계획 (외부 전달 또는 자동 생성)
-    this._plan = options.plan || StageDirector.prepare(this.stageLevel);
+    // ══════════════════════════════════════
+    //  HeroCore 허브 — 모든 것이 주인공에 탑재
+    // ══════════════════════════════════════
+    this.hero = HeroCore.getInstance();
 
-    // Map — StageDirector plan에서 맵 파라미터 추출
-    const mapParams = this._plan.map;
-    this.map = generateSurvivorMap({
-      themeId: mapParams.themeId,
-      stageLevel: mapParams.stageLevel,
-      scrollSpeed: mapParams.scrollSpeed,
-      scrollAccel: mapParams.scrollAccel,
+    // HeroCore.mountCombat → 전투 엔티티 + 시스템 일괄 생성
+    const combatData = this.hero.mountCombat({
+      stageLevel: this.stageLevel,
+      plan: options.plan,
     });
+
+    // 전투 데이터를 로컬 참조 (기존 코드 호환)
+    this._plan = combatData.plan;
+    this.map = combatData.map;
     this.camera = { x: 0, y: 0 };
+    this.player = combatData.player;
+    this.slotHeroes = combatData.allies;
+    this.spirits = combatData.spirits;
+    this.pet = combatData.pet;
 
-    // Player (UnitFactory 경유)
-    this.player = UnitFactory.createPlayerEntity(GameState, { mapH: this.map.mapH });
-
-    // HeroAI 파티 데이터 연동 — 원소 정보 + 시너지 보너스 적용
+    // HeroAI 파티 데이터 연동 — 원소 정보
     if (typeof HeroAI !== 'undefined' && HeroAI.party._calculated) {
       const pd = window._heroAIPartyData;
       if (pd && pd.heroes.length > 0) {
@@ -70,40 +73,19 @@ export default class CombatEngine {
       this.player.element = 'light';
     }
 
-    // Slot heroes (최대 5, UnitFactory 경유)
-    this.slotHeroes = GameState.heroSlots.filter(h => h != null).slice(0, 5)
-      .map((h, i) => UnitFactory.createAlly(h, { combatRole: 'slotHero', index: i, playerPos: this.player }));
-
-    // Spirits (정령 소환, UnitFactory 경유)
-    this.spirits = GameState.spirits.map((s, i) =>
-      UnitFactory.createSpirit({ ...s, combatMode: true, orbitIndex: i }));
-
-    // Pet (UnitFactory 경유)
-    this.pet = null;
-    if (GameState.petSlot) {
-      const p = GameState.petSlot;
-      this.pet = UnitFactory.createPet({
-        ...p,
-        emoji: GameState.petAppearance?.emoji || p.emoji || '💚',
-        combatMode: true,
-        x: this.player.x - 20,
-        y: this.player.y - 20,
-      });
-    }
-
     // Entities
     this.enemies = [];
     this.projectiles = [];
     this.particles = [];
-    this.droppedItems = [];  // floor upgrade items
-    this.activeAttackFx = []; // spirit attack effects
+    this.droppedItems = [];
+    this.activeAttackFx = [];
 
     // State
     this.running = false;
     this.currentWave = 0;
     this.waveSpawned = false;
     this.waveTimer = 0;
-    this.waveDelay = 3000; // ms between waves
+    this.waveDelay = 3000;
     this.totalKills = 0;
     this.totalGold = 0;
     this._animFrame = null;
@@ -113,12 +95,15 @@ export default class CombatEngine {
     this._touchStart = null;
     this._touchDir = { x: 0, y: 0 };
 
-    // Rage (등급별 발동 횟수 제한: Legendary 3, Epic 2, 나머지 1)
-    this.rageSystem = new RageSystem({
-      initialGauge: GameState.rageGauge || 0,
-      maxTriggers: RageSystem.resolveMaxTriggers(GameState),
-      gainRate: (GameState.player.rageGainRate || 100) / 100,
-    });
+    // HeroCore 경유 시스템 참조 (기존 코드 호환)
+    this.rageSystem = this.hero.systems.rage;
+    this.heroEngine = this.hero.systems.heroEngine;
+    this.stageTimer = this.hero.systems.timer;
+    this.autoScroll = this.hero.systems.autoScroll;
+    this.autoWalk = this.hero.systems.autoWalk;
+
+    // 타이머 콜백 연결
+    this.stageTimer.onTimeUp = () => this._onTimerEnd();
 
     // Pet heal gauge
     this.petHealGauge = GameState.petHealGauge || 0;
@@ -129,23 +114,6 @@ export default class CombatEngine {
 
     // 공중전 시스템
     this.aerialSystem = new AerialCombatSystem(this);
-
-    // ⏰ 스테이지 타이머 (3분)
-    this.stageTimer = new StageTimer({
-      duration: 180000, // 3분
-      onTimeUp: () => this._onTimerEnd(),
-    });
-
-    // 🌫️ 자동 전진 (뱀서류 강제 전진 — 포자 안개가 뒤에서 밀려옴)
-    this.autoScroll = new AutoScroll({
-      speed: mapParams.scrollSpeed,
-      direction: 'horizontal',
-      startBoundary: 0,
-      warningZone: 120,
-      damagePerSec: 20 + this.stageLevel * 2,
-      pushForce: 2.0,
-      accel: mapParams.scrollAccel,
-    });
 
     // 화면 흔들림 상태
     this._screenShake = null;
@@ -158,20 +126,8 @@ export default class CombatEngine {
       autoScroll: this.autoScroll,
     });
 
-    // 🚶 자동 전진 (3분에 보스와 만나는 속도)
-    this.autoWalk = new AutoWalk({
-      mapWidth: this.map.mapW,
-      stageLevel: this.stageLevel,
-    });
-
     this._bindInput();
 
-    // ⚡ HeroEngine — 모든 생성기 통합 영웅 시스템
-    this.heroEngine = new HeroEngine(this.player, {
-      mapWidth: this.map.mapW,
-      mapHeight: this.map.mapH,
-      stageLevel: this.stageLevel,
-    });
     // 레벨업 시 파티클 이펙트
     this.heroEngine.onLevelUp = (result) => {
       this.particles.push({
@@ -201,7 +157,8 @@ export default class CombatEngine {
     this.running = false;
     if (this._animFrame) cancelAnimationFrame(this._animFrame);
     this._unbindInput();
-    if (this.heroEngine) this.heroEngine.destroy();
+    // HeroCore 경유 전투 시스템 일괄 언마운트
+    this.hero.unmountCombat();
   }
 
   _loop() {
@@ -390,10 +347,8 @@ export default class CombatEngine {
   }
 
   _createEnemy(def, x, y) {
-    const enemy = UnitFactory.createEnemy(def, 1, { x, y, combatMode: true });
-    // ⚡ HeroEngine에 몹 등록 (SpeedAI 추격/포위 AI)
-    this.heroEngine.registerMob(enemy, x, y);
-    return enemy;
+    // HeroCore 경유 — 적 생성 + HeroEngine SpeedAI 자동 등록
+    return this.hero.createEnemy(def, x, y);
   }
 
   _updatePlayer(dt) {

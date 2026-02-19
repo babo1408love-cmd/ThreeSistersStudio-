@@ -8,7 +8,7 @@ import SaveManager from '../core/save-manager.js';
 import EventBus from '../core/event-bus.js';
 import { getStage, getMaxStage } from '../data/stages.js';
 import CombatEngine from '../combat/combat-engine.js';
-import StageDirector from '../systems/stage-director.js';
+import HeroCore from '../systems/hero-core.js';
 import { showConfetti } from '../ui/toast.js';
 
 export default class Stage2Scene {
@@ -70,8 +70,9 @@ export default class Stage2Scene {
       try { HeroAI.calculateAll(); } catch(e) { console.warn('[HeroAI] calculateAll 실패:', e); }
     }
 
-    // StageDirector로 스테이지 생성 계획 수립
-    const plan = StageDirector.prepare(GameState.currentStage);
+    // HeroCore 경유 스테이지 생성 계획 수립
+    const hero = HeroCore.getInstance();
+    const plan = hero.prepareStagePlan(GameState.currentStage);
     const waveCount = plan.enemies.waveCount || this._stage.combat?.waves?.length || 4;
 
     this._engine = new CombatEngine(canvas, {
@@ -101,13 +102,14 @@ export default class Stage2Scene {
 
   _onVictory(result) {
     showConfetti();
-    const rewards = this._engine._plan?.rewards || this._stage.rewards;
-    GameState.addGold(rewards.gold);
+    const hero = HeroCore.getInstance();
+    const rewards = hero.combat.plan?.rewards || this._stage.rewards;
+    hero.inventory.addGold(rewards.gold);
     GameState.stats.stagesCleared++;
 
-    // XP 보상
+    // XP 보상 (HeroCore 경유)
     const expReward = rewards.exp || 50;
-    GameState.heroExp += expReward;
+    hero.addExp(expReward);
 
     // 정령 소모 처리 (소모품 — 전투 후 자동 삭제)
     const consumedSpirits = GameState.spirits.slice();

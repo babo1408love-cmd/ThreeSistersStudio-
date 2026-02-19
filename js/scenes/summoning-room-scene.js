@@ -13,6 +13,7 @@ import { hasSummonTutorialSeen, showSummonTutorial } from '../ui/summon-tutorial
 import { HERO_ROSTER } from '../data/hero-config.js';
 import { HERO_SLOT_CONFIG, isSlotUnlocked, canEquipHero } from '../data/inventory-config.js';
 import { drawSpirit, ATTR_INFO, BODY_SHAPES, EYE_STYLES, DECORATIONS, WING_TYPES } from '../generators/spirit-generator.js';
+import HeroCore from '../systems/hero-core.js';
 
 // 등급 문자열 → 숫자 매핑 (spirit-generator는 숫자 rarity 사용)
 const RARITY_TO_NUM = { common: 1, rare: 2, magic: 3, epic: 4, legendary: 5 };
@@ -447,17 +448,14 @@ export default class SummoningRoomScene {
     setTimeout(() => this.render(), 1500);
   }
 
-  // ── 펫 진화 ──
+  // ── 펫 진화 (HeroCore 가챠 경유) ──
   _doPetEvolve() {
-    const result = PET_EVOLUTION.evolve(GameState.spiritItems);
+    const hero = HeroCore.getInstance();
+    const result = hero.gacha.evolvePet();
     if (!result.success) {
       showToast('레전드 조각이 부족합니다!');
       return;
     }
-
-    // 조각 업데이트 + 펫 장착
-    GameState.spiritItems = result.remaining;
-    GameState.equipPet(result.pet);
 
     // 연출
     this._showPetEvolveReveal(result.pet);
