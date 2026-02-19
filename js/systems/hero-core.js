@@ -219,6 +219,8 @@ export default class HeroCore {
     const stageLevel = opts.stageLevel || GameState.currentStage || 1;
     const isAerial = opts.aerial || false;
 
+    this.combat.stageLevel = stageLevel;
+
     // 스테이지 계획
     const plan = opts.plan || StageDirector.prepare(stageLevel);
     this.combat.plan = plan;
@@ -378,7 +380,8 @@ export default class HeroCore {
   // ══════════════════════════════════════════════════════
 
   createEnemy(def, x, y) {
-    const enemy = UnitFactory.createEnemy(def, 1, { x, y, combatMode: true });
+    const stageLevel = this.combat?.stageLevel || GameState.currentStage || 1;
+    const enemy = UnitFactory.createEnemy(def, 1, { x, y, combatMode: true, stageLevel });
     if (this.systems.heroEngine) {
       this.systems.heroEngine.registerMob(enemy, x, y);
     }

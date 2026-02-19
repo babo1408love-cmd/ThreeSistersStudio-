@@ -6,11 +6,9 @@
 // ── ② 스테이지 난이도 테이블 ──
 
 export const STAGE_DIFFICULTY = {
-  /** 목표 매치 수: S1=180, 이후 스테이지마다 15% 증가 */
+  /** 목표 매치 수: 100 고정 (캔디는 정령 보너스 판) */
   matchTarget(stageId) {
-    const base = 180;
-    if (stageId <= 1) return base;
-    return Math.round(base * (1 + (stageId - 1) * 0.15));
+    return 100;
   },
 
   /** 이동 횟수: matchTarget / D계수 (D = 0.75 ~ 1.43) */

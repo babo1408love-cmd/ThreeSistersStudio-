@@ -410,8 +410,11 @@ const UnitFactory = {
   // ══════════════════════════════════════
   createEnemy(baseDef, scaling = 1, options = {}) {
     const s = scaling;
+    // 스테이지당 HP +20% 복리 증가
+    const stageLevel = options.stageLevel || 1;
+    const stageHpMult = Math.pow(1.2, stageLevel - 1);
     // 뱀서류 스타일: 적 HP 소폭 증가 (다수의 약한 적)
-    const hpBase = Math.round((baseDef.hp || 50) * s * 0.6);
+    const hpBase = Math.round((baseDef.hp || 50) * s * 0.6 * stageHpMult);
     const enemy = {
       ...baseDef,
       hp: hpBase,

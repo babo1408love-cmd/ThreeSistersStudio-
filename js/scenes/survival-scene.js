@@ -23,16 +23,16 @@ import HeroEngine from '../systems/hero-engine.js';
 
 // ── 서바이벌 맵 10종 ──
 const SURVIVAL_BIOMES = [
-  { id:'forest',        name:'마법의 숲 서바이벌',     theme:'fairy_garden', emoji:'🌲' },
-  { id:'crystal',       name:'수정 동굴 서바이벌',     theme:'crystal_cave', emoji:'💎' },
-  { id:'autumn',        name:'가을 들판 서바이벌',     theme:'fairy_garden', emoji:'🍂' },
-  { id:'frozen',        name:'얼어붙은 동토 서바이벌', theme:'frozen',       emoji:'❄️' },
-  { id:'lava',          name:'용암 황무지 서바이벌',   theme:'volcano',      emoji:'🌋' },
-  { id:'ruins',         name:'고대 유적 서바이벌',     theme:'desert',       emoji:'🏛️' },
-  { id:'sky_island',    name:'하늘 섬 서바이벌',       theme:'sky',          emoji:'☁️' },
-  { id:'deep_sea',      name:'심해 서바이벌',          theme:'ocean',        emoji:'🌊' },
-  { id:'demon_outpost', name:'마왕성 외곽 서바이벌',   theme:'demon_castle', emoji:'🏰' },
-  { id:'final_arena',   name:'최종 전장 서바이벌',     theme:'demon_castle', emoji:'👿' },
+  { id:'forest',        name:'마법의 숲 총싸움',     theme:'fairy_garden', emoji:'🌲' },
+  { id:'crystal',       name:'수정 동굴 총싸움',     theme:'crystal_cave', emoji:'💎' },
+  { id:'autumn',        name:'가을 들판 총싸움',     theme:'fairy_garden', emoji:'🍂' },
+  { id:'frozen',        name:'얼어붙은 동토 총싸움', theme:'frozen',       emoji:'❄️' },
+  { id:'lava',          name:'용암 황무지 총싸움',   theme:'volcano',      emoji:'🌋' },
+  { id:'ruins',         name:'고대 유적 총싸움',     theme:'desert',       emoji:'🏛️' },
+  { id:'sky_island',    name:'하늘 섬 총싸움',       theme:'sky',          emoji:'☁️' },
+  { id:'deep_sea',      name:'심해 총싸움',          theme:'ocean',        emoji:'🌊' },
+  { id:'demon_outpost', name:'마왕성 외곽 총싸움',   theme:'demon_castle', emoji:'🏰' },
+  { id:'final_arena',   name:'최종 전장 총싸움',     theme:'demon_castle', emoji:'👿' },
 ];
 
 // ── 업그레이드 아이템 10종 ──
@@ -76,8 +76,6 @@ class SurvivalEngine {
       scrollSpeed: 0.5,
       scrollAccel: 0.00006,
     });
-    this.camera = { x: 0, y: 0 };
-
     // HeroAI: 서바이벌 모드 입장 시 전체 계산
     if (typeof HeroAI !== 'undefined' && !HeroAI.party._calculated) {
       try { HeroAI.calculateAll(); } catch(e) { console.warn('[HeroAI] calculateAll 실패:', e); }
@@ -104,6 +102,12 @@ class SurvivalEngine {
         this.player.element = pd.heroes[0].element || 'light';
       }
     }
+
+    // 카메라: 플레이어 중앙 (첫 프레임부터 올바른 위치)
+    this.camera = {
+      x: Math.max(0, this.player.x - canvas.width * 0.5),
+      y: Math.max(0, this.player.y - canvas.height * 0.5),
+    };
 
     // 슬롯 영웅 (최대 5, UnitFactory 경유)
     this.slotHeroes = GameState.heroSlots.filter(h => h != null).slice(0, 5)
@@ -373,7 +377,7 @@ class SurvivalEngine {
     this.enemies.push(enemy);
   }
 
-  // ── Player (좌우 이동만) ──
+  // ── Player (전방향 이동) ──
   _updatePlayer(dt) {
     // 🚶 자동 전진 (보스전 진입 시 정지)
     if (this.bossApproach.isBlocking() || this.bossApproach.isInBossPhase()) {
@@ -384,17 +388,26 @@ class SurvivalEngine {
     this.autoWalk.update(dt, this.player);
 
     let mx = (this._keys['d'] || this._keys['arrowright'] ? 1 : 0) - (this._keys['a'] || this._keys['arrowleft'] ? 1 : 0) + this._touchDir.x;
+    let my = (this._keys['s'] || this._keys['arrowdown'] ? 1 : 0) - (this._keys['w'] || this._keys['arrowup'] ? 1 : 0) + this._touchDir.y;
+    // 대각 이동 정규화
+    if (mx !== 0 && my !== 0) {
+      const len = Math.sqrt(mx * mx + my * my);
+      mx /= len;
+      my /= len;
+    }
     if (mx > 1) mx = 1;
     if (mx < -1) mx = -1;
 
     const spd = this.player.speed * (dt / 16);
     this.player.x += mx * spd;
+    this.player.y += my * spd;
     const minX = Math.max(16, this.autoScroll.getBoundary() + 10);
     // 보스 접근 시 우측 경계도 클램핑
     const maxX = this.bossApproach.getPhase() !== 'dormant'
       ? Math.min(this.map.mapW - 16, this.bossApproach.getBoundary() - 20)
       : this.map.mapW - 16;
     this.player.x = Math.max(minX, Math.min(maxX, this.player.x));
+    this.player.y = Math.max(16, Math.min(this.map.mapH - 16, this.player.y));
     this.player.bobPhase += dt * 0.004;
 
     // 정화된 적 접촉 체크 (빙빙 도는 애 건드리면 아군 편입)
@@ -532,7 +545,7 @@ class SurvivalEngine {
             pierce: 0, homing: false, target: null,
             element: ATTR_TO_ELEM[s.attribute] || s.attribute || null,
           });
-          s.atkTimer = s.atkSpeed || 800;
+          s.atkTimer = s.atkCooldown || s.atkSpeed || 800;
         }
       }
     });
@@ -848,10 +861,9 @@ class SurvivalEngine {
   }
 
   _updateCamera() {
-    // 서바이벌: 45도 뒤통수 카메라 — 플레이어를 화면 하단 65%에 배치
-    // → 전방(위쪽) 65%, 뒤(아래) 35% 시야 = 뒤에서 내려다보는 느낌
-    const targetX = this.player.x - this.W * 0.35;  // 약간 전방 오프셋
-    const targetY = this.player.y - this.H * 0.65;  // 플레이어가 화면 아래쪽
+    // 플레이어 화면 정중앙 (보통의 뱀서류 시점)
+    const targetX = this.player.x - this.W * 0.5;
+    const targetY = this.player.y - this.H * 0.5;
     this.camera.x += (targetX - this.camera.x) * 0.08;
     this.camera.y += (targetY - this.camera.y) * 0.08;
     this.camera.x = Math.max(0, Math.min(this.map.mapW - this.W, this.camera.x));
@@ -1213,9 +1225,9 @@ export default class SurvivalScene {
       <div class="survival-select">
         <div class="sv-header">
           <button class="btn btn-secondary" id="sv-back">← 돌아가기</button>
-          <h2>⚔️ 서바이벌 모드</h2>
+          <h2>🔫 뱀서 총싸움</h2>
         </div>
-        <p class="sv-desc">무한 웨이브에 도전! 적을 정화하여 동료로 만드세요.</p>
+        <p class="sv-desc">무한 웨이브 총싸움! 적을 정화하여 동료로 만드세요.</p>
         <div class="sv-biome-list">
           ${SURVIVAL_BIOMES.map((b, i) => {
             const locked = i >= maxRegion;
@@ -1272,13 +1284,13 @@ export default class SurvivalScene {
     const controlBar = document.createElement('div');
     controlBar.className = 'combat-control-bar';
     controlBar.innerHTML = `
-      <div class="combat-ctrl-info"><span>서바이벌: ${SURVIVAL_BIOMES.find(b => b.id === biomeId)?.name || biomeId}</span></div>
+      <div class="combat-ctrl-info"><span>뱀서 총싸움: ${SURVIVAL_BIOMES.find(b => b.id === biomeId)?.name || biomeId}</span></div>
       <button class="btn btn-secondary btn-sm" id="sv-quit">포기</button>
     `;
     this.el.appendChild(controlBar);
 
     controlBar.querySelector('#sv-quit').onclick = () => {
-      if (confirm('서바이벌을 포기하시겠습니까?')) {
+      if (confirm('뱀서 총싸움을 포기하시겠습니까?')) {
         this._onSurvivalEnd();
       }
     };
@@ -1307,7 +1319,7 @@ export default class SurvivalScene {
     const overlay = document.createElement('div');
     overlay.className = 'victory-overlay';
     overlay.innerHTML = `
-      <div class="victory-overlay__title">⚔️ 서바이벌 종료</div>
+      <div class="victory-overlay__title">🔫 뱀서 총싸움 종료</div>
       <div class="victory-stats" style="margin:10px 0;">
         <span>🌊 웨이브: ${wave}</span>
         <span>💀 처치: ${kills}</span>

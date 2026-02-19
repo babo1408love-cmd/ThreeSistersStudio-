@@ -54,7 +54,7 @@ export default class MainMenuScene {
         ${hasSave ? `
         <div class="mm-nav-grid">
           <button class="mm-nav-btn" id="btn-worldmap">🗺️<br>월드맵</button>
-          <button class="mm-nav-btn" id="btn-survival">⚔️<br>서바이벌</button>
+          <button class="mm-nav-btn" id="btn-survival">🔫<br>뱀서 총싸움</button>
           <button class="mm-nav-btn" id="btn-dungeon">🏰<br>던전</button>
           <button class="mm-nav-btn" id="btn-summon-tree">🌳<br>소환나무</button>
           <button class="mm-nav-btn" id="btn-gacha">🎰<br>소환</button>
@@ -72,7 +72,7 @@ export default class MainMenuScene {
           <div class="mm-test-label">🔧 테스트</div>
           <div class="mm-test-grid">
             <button class="mm-test-btn" id="btn-test-vamp">🧛<br>뱀서<br>맵테스트</button>
-            <button class="mm-test-btn" id="btn-test-surv">💀<br>서바이벌<br>테스트</button>
+            <button class="mm-test-btn" id="btn-test-surv">🔫<br>뱀서 총싸움<br>테스트</button>
             <button class="mm-test-btn" id="btn-test-boss">👹<br>보스전<br>테스트</button>
           </div>
         </div>
