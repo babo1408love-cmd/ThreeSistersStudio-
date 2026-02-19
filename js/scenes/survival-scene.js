@@ -88,7 +88,7 @@ class SurvivalEngine {
       x: 120, y: this.map.mapH / 2,
       hp: ps.maxHp || 250, maxHp: ps.maxHp || 250,
       attack: ps.attack || 12, defense: ps.defense || 7,
-      speed: 2.8, radius: 16,
+      speed: ps.speed || 3, radius: 16,
       atkSpeed: 300, atkTimer: 0,
       projSize: 6, projSpeed: 8,
       shotCount: 1, pierce: 0, homing: false,

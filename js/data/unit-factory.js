@@ -639,7 +639,7 @@ const UnitFactory = {
       maxHp: ps.maxHp || 200,
       attack: ps.attack || 10,
       defense: ps.defense || 5,
-      speed: 2.5,
+      speed: ps.speed || 3,
       radius: 16,
       atkSpeed: 300,
       atkTimer: 0,
