@@ -89,7 +89,7 @@ export default class CombatEngine {
     this.currentWave = 0;
     this.waveSpawned = false;
     this.waveTimer = 0;
-    this.waveDelay = 3000;
+    this.waveDelay = 10000;  // 10초마다 웨이브
     this.totalKills = 0;
     this.totalGold = 0;
     this._animFrame = null;
@@ -303,21 +303,11 @@ export default class CombatEngine {
     // 보스 접근 블로킹 또는 보스전 중에는 새 웨이브 스폰 중단
     if (this.bossApproach.isBlocking() || this.bossApproach.isInBossPhase()) return;
 
-    if (this.enemies.length === 0 && this.waveSpawned) {
-      // 마지막 웨이브 클리어 → 보스방 게이트 활성화 (배틀아레나 진입)
-      if (this.currentWave >= this.maxWaves && this.bossRoomSystem.enabled) {
-        this.bossRoomSystem.activateGate();
-        return;
-      }
-
-      this.waveTimer += dt;
-      if (this.waveTimer >= this.waveDelay) {
-        this.currentWave++;
-        // 타이머 남아있으면 maxWaves 이후에도 계속 웨이브 스폰
-        if (this.currentWave <= this.maxWaves || !this.stageTimer.finished) {
-          this._spawnWave();
-        }
-      }
+    // 10초마다 무조건 새 웨이브 스폰 (적 전멸 안 기다림)
+    this.waveTimer += dt;
+    if (this.waveTimer >= this.waveDelay) {
+      this.currentWave++;
+      this._spawnWave();
     }
   }
 
