@@ -66,8 +66,17 @@ export default class MainMenuScene {
           <button class="mm-nav-btn" id="btn-codex">📖<br>도감</button>
           <button class="mm-nav-btn" id="btn-settings">⚙️<br>설정</button>
           <button class="mm-nav-btn" id="btn-ranking">🏆<br>랭킹</button>
-          <button class="mm-nav-btn" id="btn-aerial" style="border:1px solid #67e8f9;">☁️<br>공중전</button>
-        </div>` : ''}
+        </div>
+        <!-- ★ TEST SECTION — 나중에 이 블록 전체 제거 ★ -->
+        <div class="mm-test-section">
+          <div class="mm-test-label">🔧 테스트</div>
+          <div class="mm-test-grid">
+            <button class="mm-test-btn" id="btn-test-vamp">🧛<br>뱀서<br>맵테스트</button>
+            <button class="mm-test-btn" id="btn-test-surv">💀<br>서바이벌<br>테스트</button>
+          </div>
+        </div>
+        <!-- ★ /TEST SECTION ★ -->
+        ` : ''}
 
         <div class="main-menu__version">v2.0 — 몽글벨</div>
       </div>
@@ -90,6 +99,28 @@ export default class MainMenuScene {
         }
         .mm-nav-btn:hover { background: rgba(255,255,255,0.12); transform: scale(1.05); }
         .mm-nav-btn:active { transform: scale(0.95); }
+        /* ★ TEST SECTION 스타일 — 나중에 제거 ★ */
+        .mm-test-section {
+          max-width: 340px; margin: 12px auto 0;
+          border: 2px dashed rgba(255,100,100,0.4); border-radius: 12px;
+          padding: 8px; background: rgba(255,50,50,0.05);
+        }
+        .mm-test-label {
+          font-size: 10px; color: #ff6666; text-align: center;
+          margin-bottom: 6px; letter-spacing: 2px; font-weight: 700;
+        }
+        .mm-test-grid {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+        }
+        .mm-test-btn {
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 10px 4px; font-size: 11px; line-height: 1.3;
+          background: rgba(255,100,100,0.1); border: 1px solid rgba(255,100,100,0.3);
+          border-radius: 12px; color: #ff9999; cursor: pointer;
+          transition: background 0.2s, transform 0.15s;
+        }
+        .mm-test-btn:hover { background: rgba(255,100,100,0.2); transform: scale(1.05); }
+        .mm-test-btn:active { transform: scale(0.95); }
       </style>
     `;
 
@@ -120,7 +151,9 @@ export default class MainMenuScene {
       bind('#btn-codex', () => SceneManager.go('codex'));
       bind('#btn-settings', () => openSettings());
       bind('#btn-ranking', () => SceneManager.go('ranking'));
-      bind('#btn-aerial', () => SceneManager.go('aerial'));
+      // ★ TEST BUTTONS — 나중에 제거 ★
+      bind('#btn-test-vamp', () => SceneManager.go('stage2'));
+      bind('#btn-test-surv', () => SceneManager.go('survival'));
     }
 
     // Show login reward popup
