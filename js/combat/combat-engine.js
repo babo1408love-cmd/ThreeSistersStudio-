@@ -43,6 +43,7 @@ export default class CombatEngine {
     this.onVictory = options.onVictory || (() => {});
     this.onDeath = options.onDeath || (() => {});
     this._aerial = options.aerial || false;
+    this._bossTest = options.bossTest || false;
 
     // ══════════════════════════════════════
     //  HeroCore 허브 — 모든 것이 주인공에 탑재
@@ -129,6 +130,13 @@ export default class CombatEngine {
       autoScroll: this.autoScroll,
       approachConfig: this._aerial ? AERIAL_BOSS_APPROACH_CONFIG : undefined,
     });
+
+    // 보스전 테스트 모드: 타이머 10초 + 보스 접근 즉시 시작
+    if (this._bossTest) {
+      this.stageTimer.duration = 10000;
+      this.stageTimer.remaining = 10000;
+      this.bossApproach.startDelay = 1000;
+    }
 
     this._bindInput();
 
@@ -339,12 +347,11 @@ export default class CombatEngine {
       this.enemies.push(this._createEnemy(eDef, sx, sy));
     });
 
-    // 중간보스 — 정면(오른쪽)에서만 등장, 비선공 + 속도 1.5배
+    // 중간보스 — 정면(오른쪽)에서만 등장, 속도 1.5배
     if (wave.boss) {
       const bx = Math.min(this.map.mapW - 50, this.player.x + this.W * 0.5 + 60);
       const by = this.player.y + (Math.random() - 0.5) * 100;
       const bossEntity = this._createEnemy(wave.boss, bx, by);
-      bossEntity.passive = true;   // 비선공 플래그
       bossEntity.fixedSpeedMul = 1.5; // 플레이어 속도의 1.5배 고정
       this.enemies.push(bossEntity);
     }
@@ -409,8 +416,9 @@ export default class CombatEngine {
 
       // Auto-attack (HeroBattleAI 원소 상성 지원)
       h.atkTimer -= dt;
-      if (h.atkTimer <= 0 && this.enemies.length > 0) {
-        const nearest = this._findNearest(h, this.enemies);
+      const hBoss = this._getActiveBossTarget();
+      if (h.atkTimer <= 0 && (this.enemies.length > 0 || hBoss)) {
+        const nearest = (this.enemies.length > 0 ? this._findNearest(h, this.enemies) : null) || hBoss;
         if (nearest && this._dist(h, nearest) < 500) {
           const angle = Math.atan2(nearest.y - h.y, nearest.x - h.x);
           this.projectiles.push({
@@ -447,8 +455,9 @@ export default class CombatEngine {
 
       // 정령 미사일 발사 — 정령 수만큼 미사일이 날아감!
       s.atkTimer -= dt;
-      if (s.atkTimer <= 0 && this.enemies.length > 0) {
-        const nearest = this._findNearest(s, this.enemies);
+      const sBoss = this._getActiveBossTarget();
+      if (s.atkTimer <= 0 && (this.enemies.length > 0 || sBoss)) {
+        const nearest = (this.enemies.length > 0 ? this._findNearest(s, this.enemies) : null) || sBoss;
         if (nearest && this._dist(s, nearest) < 600) {
           const baseDmg = 5 + s.rarity * 3 + s.level;
           const dmg = baseDmg * this.rageSystem.getDamageMultiplier();
@@ -520,11 +529,28 @@ export default class CombatEngine {
     }
   }
 
+  // ── 현재 활성 보스방 보스 찾기 (엔진 자체 + BossApproach 보스방) ──
+  _getActiveBossTarget() {
+    if (this.bossRoomSystem.isInBossRoom() && this.bossRoomSystem.boss?.alive) {
+      return this.bossRoomSystem.boss;
+    }
+    if (this.bossApproach.bossRoomSystem?.boss?.alive) {
+      return this.bossApproach.bossRoomSystem.boss;
+    }
+    return null;
+  }
+
   _updateAutoAttack(dt) {
+    // 자동공격 대상: enemies 배열 + 보스방 보스
+    const bossTarget = this._getActiveBossTarget();
+    const hasTargets = this.enemies.length > 0 || bossTarget;
+
     // ⚡ HeroEngine 스킬 자동 발동 (행동 연계)
     const pendingSkill = this.heroEngine.getPendingSkill();
-    if (pendingSkill && this.enemies.length > 0) {
-      const skillTarget = this._findNearest(this.player, this.enemies);
+    if (pendingSkill && hasTargets) {
+      const skillTarget = this.enemies.length > 0
+        ? this._findNearest(this.player, this.enemies)
+        : bossTarget;
       if (skillTarget && this._dist(this.player, skillTarget) < 500) {
         const result = this.heroEngine.fireSkill(skillTarget);
         if (result) {
@@ -538,8 +564,9 @@ export default class CombatEngine {
     }
 
     this.player.atkTimer -= dt;
-    if (this.player.atkTimer <= 0 && this.enemies.length > 0) {
-      const nearest = this._findNearest(this.player, this.enemies);
+    if (this.player.atkTimer <= 0 && hasTargets) {
+      // 보스가 있으면 보스 우선, 없으면 가장 가까운 적
+      const nearest = bossTarget || this._findNearest(this.player, this.enemies);
       if (nearest) {
         for (let i = 0; i < this.player.shotCount; i++) {
           const spread = (i - (this.player.shotCount - 1) / 2) * 0.15;
@@ -681,15 +708,21 @@ export default class CombatEngine {
 
       // Hit enemies
       if (p.source === 'player' || p.source === 'ally') {
-        // 보스방 보스에게 투사체 히트
-        if (this.bossRoomSystem.isInBossRoom() && this.bossRoomSystem.boss) {
-          const boss = this.bossRoomSystem.boss;
+        // 보스방 보스에게 투사체 히트 (엔진 자체 + BossApproach 보스방 둘 다 체크)
+        const activeBRS = (this.bossRoomSystem.isInBossRoom() && this.bossRoomSystem.boss)
+          ? this.bossRoomSystem
+          : (this.bossApproach.bossRoomSystem?.boss?.alive)
+            ? this.bossApproach.bossRoomSystem
+            : null;
+
+        if (activeBRS && activeBRS.boss) {
+          const boss = activeBRS.boss;
           const bossRadius = (boss.size || 3) * 14;
           const dx = p.x - boss.x;
           const dy = p.y - boss.y;
           const rr = (p.radius || 5) + bossRadius;
           if (dx * dx + dy * dy < rr * rr && boss.alive) {
-            const dmg = this.bossRoomSystem.damageBoss(p.damage);
+            const dmg = activeBRS.damageBoss(p.damage);
             this._spawnHitParticles(boss.x, boss.y, '#ff6b6b');
             this.particles.push({
               x: boss.x, y: boss.y - bossRadius - 5,
@@ -778,7 +811,19 @@ export default class CombatEngine {
   }
 
   _updateDroppedItems() {
+    const MAGNET_RADIUS = 150;   // 자석 흡인 범위 (px)
+    const MAGNET_SPEED = 4.0;    // 자석 흡인 속도 (px/frame)
+
     this.droppedItems = this.droppedItems.filter(item => {
+      // 자석 효과: 범위 안 아이템을 플레이어 방향으로 끌어당김
+      const mdx = item.x - this.player.x;
+      const mdy = item.y - this.player.y;
+      const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
+      if (mDist < MAGNET_RADIUS && mDist > 5) {
+        item.x -= (mdx / mDist) * MAGNET_SPEED;
+        item.y -= (mdy / mDist) * MAGNET_SPEED;
+      }
+
       // Check player pickup (touch distance)
       const dx = item.x - this.player.x;
       const dy = item.y - this.player.y;

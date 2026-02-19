@@ -73,6 +73,7 @@ export default class MainMenuScene {
           <div class="mm-test-grid">
             <button class="mm-test-btn" id="btn-test-vamp">🧛<br>뱀서<br>맵테스트</button>
             <button class="mm-test-btn" id="btn-test-surv">💀<br>서바이벌<br>테스트</button>
+            <button class="mm-test-btn" id="btn-test-boss">👹<br>보스전<br>테스트</button>
           </div>
         </div>
         <!-- ★ /TEST SECTION ★ -->
@@ -110,7 +111,7 @@ export default class MainMenuScene {
           margin-bottom: 6px; letter-spacing: 2px; font-weight: 700;
         }
         .mm-test-grid {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+          display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
         }
         .mm-test-btn {
           display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -154,6 +155,7 @@ export default class MainMenuScene {
       // ★ TEST BUTTONS — 나중에 제거 ★
       bind('#btn-test-vamp', () => SceneManager.go('stage2'));
       bind('#btn-test-surv', () => SceneManager.go('survival'));
+      bind('#btn-test-boss', () => SceneManager.go('stage2', { bossTest: true }));
     }
 
     // Show login reward popup

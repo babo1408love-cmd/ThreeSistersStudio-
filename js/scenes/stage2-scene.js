@@ -12,10 +12,11 @@ import HeroCore from '../systems/hero-core.js';
 import { showConfetti } from '../ui/toast.js';
 
 export default class Stage2Scene {
-  onCreate() {
+  onCreate(params) {
     this._engine = null;
     this._stage = getStage(GameState.currentStage);
     this._showingSummonTree = false;
+    this._bossTest = params?.bossTest || false;
   }
 
   render() {
@@ -80,6 +81,7 @@ export default class Stage2Scene {
       maxWaves: waveCount,
       mapTheme: plan.map.themeId,
       plan,  // StageDirector 생성 계획 전달
+      bossTest: this._bossTest,  // 보스전 테스트: 10초 타이머 + 즉시 보스 접근
       onVictory: (result) => this._onVictory(result),
       onDeath: () => this._onDeath(),
     });

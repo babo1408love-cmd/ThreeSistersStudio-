@@ -294,8 +294,8 @@ export const BOSS_ROOM_CONFIG = {
 // 좌측 포자안개(AutoScroll) + 우측 보스접근(BossApproach) → 집게 효과
 // 플레이어 영역 점점 축소 → 만남 → 배틀아레나 동적 생성 → 보스전
 export const BOSS_APPROACH_CONFIG = {
-  baseSpeed: 0.3,              // px/frame @60fps
-  accel: 0.00004,              // 가속도/ms
+  baseSpeed: 0.15,             // px/frame @60fps (절반 거리 맞춤)
+  accel: 0.00002,              // 가속도/ms (절반)
   warningZone: 150,            // 경고 구간 px
   timerAccelMultiplier: 5.0,   // 타이머 종료 후 속도 배율
   timerAccelMinSpeed: 8.0,     // 타이머 종료 후 최소 속도
@@ -312,10 +312,10 @@ export const BOSS_APPROACH_CONFIG = {
     warningEmoji: '\u2620\uFE0F', // ☠️
   },
   stageOverrides: {
-    1: { baseSpeed: 0.2, accel: 0.00003 },
-    2: { baseSpeed: 0.3, accel: 0.00004 },
-    3: { baseSpeed: 0.35, accel: 0.00005 },
-    4: { baseSpeed: 0.4, accel: 0.00006 },
+    1: { baseSpeed: 0.1, accel: 0.000015 },
+    2: { baseSpeed: 0.15, accel: 0.00002 },
+    3: { baseSpeed: 0.175, accel: 0.000025 },
+    4: { baseSpeed: 0.2, accel: 0.00003 },
   },
 };
 

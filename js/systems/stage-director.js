@@ -58,8 +58,9 @@ export default class StageDirector {
 
     // ── 맵 설정 ──
     const mapTheme = stage.mapTheme || region.mapTheme || 'fairy_garden';
-    const scrollSpeed = 0.6 + stageLevel * 0.02;
-    const scrollAccel = 0.00006 + stageLevel * 0.000002;
+    // ★ 절반 거리 맵 (3분 동안 ~35,000px 스크롤)
+    const scrollSpeed = 0.3 + stageLevel * 0.01;
+    const scrollAccel = 0.00003 + stageLevel * 0.000001;
     const density = THEME_DENSITY[mapTheme] || THEME_DENSITY.fairy_garden;
 
     // 스테이지 진행에 따라 밀도 조정 (후반 스테이지 = 더 복잡한 지형)

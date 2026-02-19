@@ -786,7 +786,19 @@ class SurvivalEngine {
 
   // ── Dropped Items ──
   _updateDroppedItems() {
+    const MAGNET_RADIUS = 150;
+    const MAGNET_SPEED = 4.0;
+
     this.droppedItems = this.droppedItems.filter(item => {
+      // 자석 효과
+      const mdx = item.x - this.player.x;
+      const mdy = item.y - this.player.y;
+      const mDist = Math.sqrt(mdx * mdx + mdy * mdy);
+      if (mDist < MAGNET_RADIUS && mDist > 5) {
+        item.x -= (mdx / mDist) * MAGNET_SPEED;
+        item.y -= (mdy / mDist) * MAGNET_SPEED;
+      }
+
       const dx = item.x - this.player.x;
       const dy = item.y - this.player.y;
       if (dx * dx + dy * dy < 30 * 30) {
