@@ -323,14 +323,12 @@ export default class CombatEngine {
       wave = generateWave(this.currentWave, this.stageLevel, playerPower);
     }
 
-    // 일반몹: 플레이어 뒤쪽(왼쪽) + 상하에서 등장
+    // 일반몹: 화면 바깥 랜덤 방향에서 등장 (360도)
     wave.enemies.forEach((eDef, i) => {
-      const side = i % 3; // 뒤(좌), 위, 아래 — 정면(우) 제외
-      let sx, sy;
-      const offset = 40 + Math.random() * 60;
-      if (side === 0) { sx = this.player.x - this.W * 0.5 - offset; sy = this.player.y + (Math.random() - 0.5) * this.H; }
-      else if (side === 1) { sx = this.player.x + (Math.random() - 0.5) * this.W * 0.6; sy = this.player.y - this.H * 0.5 - offset; }
-      else { sx = this.player.x + (Math.random() - 0.5) * this.W * 0.6; sy = this.player.y + this.H * 0.5 + offset; }
+      const angle = Math.random() * Math.PI * 2;
+      const dist = this.W * 0.5 + 40 + Math.random() * 80;
+      let sx = this.player.x + Math.cos(angle) * dist;
+      let sy = this.player.y + Math.sin(angle) * dist;
 
       sx = Math.max(20, Math.min(this.map.mapW - 20, sx));
       sy = Math.max(20, Math.min(this.map.mapH - 20, sy));
