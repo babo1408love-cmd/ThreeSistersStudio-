@@ -160,8 +160,13 @@ export default class SummoningRoomScene {
     const fragBar = Array.from({length: 6}, (_, i) =>
       i < (normalCount % 6 || (normalCount >= 6 ? 6 : 0)) ? '▶️' : '⬛'
     ).join('');
+    const maxSpirits = GameState.MAX_SPIRITS || 10;
+    const currentCount = GameState.spirits.length;
+    const remaining = maxSpirits - currentCount;
+    const spiritsFull = remaining <= 0;
     const setsAvailable = Math.floor(normalCount / 6);
-    const spiritsFull = GameState.spirits.length >= (GameState.MAX_SPIRITS || 10);
+    // 실제 소환 가능 횟수 = 조각 세트 수와 남은 슬롯 중 작은 값
+    const summonableCount = Math.min(setsAvailable, remaining);
 
     el.innerHTML = `
       <div class="summoning-tree" id="summon-tree" style="font-size:60px;margin:8px 0;">🌳</div>
@@ -170,13 +175,19 @@ export default class SummoningRoomScene {
         조각 6개를 모으면 정령을 소환할 수 있어요!
       </div>
 
+      <!-- 보유 현황 -->
+      <div style="margin-bottom:8px;padding:8px 12px;background:rgba(100,200,255,0.08);border:1px solid rgba(100,200,255,0.2);border-radius:8px;text-align:center;">
+        <span style="font-size:0.9em;">정령 보유: <b style="color:${spiritsFull ? '#ff6b6b' : 'var(--green)'};">${currentCount}</b> / ${maxSpirits}마리</span>
+        ${!spiritsFull ? `<span style="font-size:0.8em;color:var(--text-muted);margin-left:8px;">(${remaining}마리 소환 가능)</span>` : ''}
+      </div>
+
       ${spiritsFull ? `
         <div style="margin-bottom:12px;padding:10px;background:rgba(255,100,100,0.15);border:1px solid rgba(255,100,100,0.4);border-radius:8px;">
           <div style="font-size:0.95em;color:#ff6b6b;font-weight:700;text-align:center;">
-            더이상 소환할수 없습니다
+            정령이 가득 찼습니다
           </div>
           <div style="font-size:0.8em;color:var(--text-secondary);text-align:center;margin-top:4px;">
-            정령 보유 한도 ${GameState.MAX_SPIRITS || 10}마리에 도달했습니다
+            정령을 해방하거나 전투에서 소모한 후 다시 소환하세요
           </div>
         </div>
       ` : ''}
@@ -184,7 +195,7 @@ export default class SummoningRoomScene {
       <div style="margin-bottom:12px;">
         <div style="font-size:0.85em;margin-bottom:4px;">
           일반 조각: <b style="color:var(--green);">${normalCount}</b>개
-          ${normalCount >= 6 && !spiritsFull ? `(${setsAvailable}회 소환 가능!)` : normalCount >= 6 && spiritsFull ? '(정령 한도 초과)' : `(${6 - normalCount % 6}개 더 필요)`}
+          ${setsAvailable >= 1 && !spiritsFull ? `(${summonableCount}회 소환 가능!)` : setsAvailable >= 1 && spiritsFull ? '(정령 가득 참)' : `(${6 - normalCount % 6}개 더 필요)`}
         </div>
         <div style="font-size:0.85em;color:var(--text-muted);">
           레전드 조각: <b style="color:var(--gold);">${legendFragments}</b>개 (펫 진화용)
@@ -201,14 +212,14 @@ export default class SummoningRoomScene {
       </div>
 
       <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:8px;align-items:center;">
-        <button class="btn ${canSummon ? 'btn-primary' : 'btn-disabled'} btn-lg" id="btn-summon"
-          ${canSummon ? '' : 'disabled'} style="${canSummon ? 'animation:pulse 1.5s infinite;' : 'opacity:0.4;'}">
+        <button class="btn ${canSummon && !spiritsFull ? 'btn-primary' : 'btn-disabled'} btn-lg" id="btn-summon"
+          ${canSummon && !spiritsFull ? '' : 'disabled'} style="${canSummon && !spiritsFull ? 'animation:pulse 1.5s infinite;' : 'opacity:0.4;'}">
           🌳 정령 소환! (조각 6개)
         </button>
-        ${setsAvailable >= 2 && !spiritsFull ? `
+        ${summonableCount >= 2 ? `
           <button class="btn btn-primary btn-lg" id="btn-summon-all"
             style="background:linear-gradient(135deg,var(--purple),var(--gold));border:none;">
-            🌟 모두 소환! (${setsAvailable}회)
+            🌟 모두 소환! (${summonableCount}회)
           </button>
         ` : ''}
       </div>
@@ -306,7 +317,7 @@ export default class SummoningRoomScene {
   // ── 자동 매칭 소환 ──
   _doAutoSummon() {
     if (GameState.spirits.length >= (GameState.MAX_SPIRITS || 10)) {
-      showToast('더이상 소환할수 없습니다');
+      showToast('정령이 가득 찼습니다! 해방하거나 전투에서 소모하세요');
       return;
     }
 
