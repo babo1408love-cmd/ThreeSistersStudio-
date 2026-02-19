@@ -10,6 +10,97 @@
 import { BattleArena, ARENA_THEMES } from '../generators/battle-arena.js';
 import { WARP_EFFECTS, renderWarpEffect } from '../generators/aerial-effects.js';
 
+// ══════════════════════════════════════════════════════
+//  공중전 속도 시스템 (뱀서류 속도 시스템 기반)
+//  원거리: 빠르게 접근 → 근거리: 동일 속도 (뱀서류와 동일 구조)
+//  공중전 특화: 전체적으로 1.5배 빠름 + 수직 이동 자유
+// ══════════════════════════════════════════════════════
+
+// ── 공중전 적 속도 설정 (뱀서류 ENEMY_SPEED_CONFIG 복사 + 공중전 특화) ──
+export const AERIAL_SPEED_CONFIG = {
+  // 원거리 속도 배율 (플레이어 속도 대비) — 공중이라 더 빠름
+  farSpeedMultiplier: 2.0,        // 원거리: 플레이어의 200% (빠르게 접근)
+  // 근거리 속도 배율 (플레이어 속도 대비)
+  nearSpeedMultiplier: 1.2,       // 근거리: 플레이어의 120% (살짝 빠름)
+  // 근접 판정 거리 (px) — 이 이내면 nearSpeed 적용
+  proximityRadius: 60,
+  // 원거리 판정 거리 (px) — 이 이상이면 farSpeed 적용
+  farRadius: 250,
+  // 보스 전용 오버라이드
+  boss: {
+    farSpeedMultiplier: 1.6,      // 보스 원거리: 160% (묵직하지만 공중답게)
+    nearSpeedMultiplier: 1.1,     // 보스 근거리: 110% (동일 속도)
+    proximityRadius: 50,
+    farRadius: 300,
+  },
+  // 워프 거리 (이 이상이면 플레이어 근처로 순간이동)
+  warpDistance: 500,
+  warpMinDist: 200,
+  warpMaxDist: 350,
+};
+
+// ── 공중전 자동 스크롤 (하늘 바람이 밀려옴) ──
+export const AERIAL_SCROLL_CONFIG = {
+  speed: 1.0,                     // 뱀서류보다 25% 빠름 (바람 효과)
+  direction: 'horizontal',
+  startBoundary: 0,
+  warningZone: 100,               // 경고 구간 좁음 (빠른 반응 필요)
+  damagePerSec: 30,               // 하늘 바깥 데미지 (높음)
+  pushForce: 2.5,                 // 강한 바람 밀어내기
+  accel: 0.00012,                 // 뱀서류보다 빠른 가속
+};
+
+// ── 공중전 자동 전진 (보스와 3분에 만남) ──
+export const AERIAL_WALK_CONFIG = {
+  timerDuration: 180000,          // 3분
+};
+
+// ── 공중전 보스 접근 (뱀서류 BOSS_APPROACH_CONFIG 복사 + 공중전 특화) ──
+export const AERIAL_BOSS_APPROACH_CONFIG = {
+  baseSpeed: 0.4,                 // 뱀서류보다 33% 빠름 (공중 보스는 빠르게 접근)
+  accel: 0.00006,                 // 가속도 증가
+  warningZone: 120,
+  timerAccelMultiplier: 6.0,      // 타이머 종료 후 6배 속도 (급접근)
+  timerAccelMinSpeed: 10.0,       // 최소 속도 높음
+  minGap: 250,                    // 스크롤과 최소 간격 (좁음 → 긴장감)
+  arenaFormDuration: 1200,        // 아레나 형성 빠름
+  meetingDuration: 400,
+  startDelay: 3000,               // 5초→3초 (공중전은 바로 시작)
+  visual: {
+    fogColorInner: 'rgba(30,0,60,0.9)',   // 보라색 하늘 안개
+    fogColorOuter: 'rgba(80,20,120,0)',
+    particleColor: '#aa44ff',              // 보라 파티클
+    bossEmoji: '\uD83D\uDC32',            // 🐲
+    warningEmoji: '\u26A1',                // ⚡
+  },
+  stageOverrides: {
+    1: { baseSpeed: 0.3, accel: 0.00004 },
+    2: { baseSpeed: 0.4, accel: 0.00006 },
+    3: { baseSpeed: 0.45, accel: 0.00007 },
+    4: { baseSpeed: 0.5, accel: 0.00008 },
+  },
+};
+
+// ── 공중전 적 속도 계산 (거리 기반 보간) ──
+export function calcAerialEnemySpeed(dist, playerSpeed, isBoss = false) {
+  const cfg = isBoss ? AERIAL_SPEED_CONFIG.boss : AERIAL_SPEED_CONFIG;
+  const farR = cfg.farRadius;
+  const nearR = cfg.proximityRadius;
+  const farMul = cfg.farSpeedMultiplier;
+  const nearMul = cfg.nearSpeedMultiplier;
+
+  let t; // 0=near, 1=far
+  if (dist <= nearR) {
+    t = 0;
+  } else if (dist >= farR) {
+    t = 1;
+  } else {
+    t = (dist - nearR) / (farR - nearR);
+  }
+  const multiplier = nearMul + (farMul - nearMul) * t;
+  return playerSpeed * multiplier;
+}
+
 // 공중전 페이즈
 const AERIAL_PHASE = {
   INACTIVE: 'inactive',
