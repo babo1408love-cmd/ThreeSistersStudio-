@@ -17,6 +17,7 @@ import BossApproachSystem from '../systems/boss-approach.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
 import HeroCore from '../systems/hero-core.js';
 import StageDirector from '../systems/stage-director.js';
+import { getWavePhase, applySpawnMult, DROP_CHANCE_PER_MOB, BOSS_DROP_GUARANTEED } from '../data/wave-scaling-config.js';
 
 // ── 업그레이드 아이템 정의 ──
 const UPGRADE_ITEMS = [
@@ -154,6 +155,22 @@ export default class CombatEngine {
     this.running = true;
     this._lastTime = performance.now();
     this.currentWave = 1;
+
+    // FormationAI: 초기 배치 계산
+    if (typeof FormationAI !== 'undefined') {
+      const partyData = {
+        heroes: [
+          { id: 'main', class: GameState.heroUpgrade?.currentClass || 'warrior', role: 'tank_dps' },
+          ...this.slotHeroes.map((h, i) => ({ id: `slot_${i}`, class: h.class || 'warrior', role: h.role || 'tank_dps' }))
+        ],
+        pet: this.pet ? { id: 'pet', type: this.pet.type || 'cat', rarity: this.pet.rarity || 'common' } : null,
+        spirits: this.spirits.map((s, i) => ({ id: `spirit_${i}`, element: s.element || s.attribute, rarity: s.rarity || 'common' }))
+      };
+      this._formation = FormationAI.calculateFormation(partyData, { x: this.player.x, y: 0, z: this.player.y });
+      // 전투 모드로 전환
+      FormationAI.switchFormation(this._formation, 'combat', { x: this.player.x, z: this.player.y });
+    }
+
     this._spawnWave();
     this.stageTimer.start();
     this.autoScroll.start();
@@ -209,6 +226,11 @@ export default class CombatEngine {
 
     // 공중전 시스템 업데이트
     this.aerialSystem.update(dt);
+
+    // FormationAI: 정령 공전 + 파티 따라가기
+    if (this._formation && typeof FormationAI !== 'undefined') {
+      FormationAI.update(this._formation, { x: this.player.x, y: 0, z: this.player.y }, dt / 1000);
+    }
 
     // ⚡ HeroEngine: SpeedAI 동기화 + 전술 AI + 스킬 쿨다운 + 위험도
     if (!this.bossApproach.isBlocking()) {
@@ -323,16 +345,33 @@ export default class CombatEngine {
       wave = generateWave(this.currentWave, this.stageLevel, playerPower);
     }
 
-    // 일반몹: 화면 바깥 랜덤 방향에서 등장 (360도)
-    wave.enemies.forEach((eDef, i) => {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = this.W * 0.5 + 40 + Math.random() * 80;
-      let sx = this.player.x + Math.cos(angle) * dist;
-      let sy = this.player.y + Math.sin(angle) * dist;
+    // 시간대별 몹 수 스케일링 (wave-scaling-config.js)
+    const phase = getWavePhase(this._elapsed / 1000);
+    const enemies = applySpawnMult(wave.enemies, phase.spawnMult);
+
+    // 엘리트 지정: 웨이브당 랜덤 1마리
+    const eliteIdx = Math.floor(Math.random() * enemies.length);
+
+    // 일반몹: 화면 바깥 원형 배치 (균등 간격)
+    const spawnDist = this.W * 0.5 + 60;
+    enemies.forEach((eDef, i) => {
+      const angle = (i / enemies.length) * Math.PI * 2;
+      let sx = this.player.x + Math.cos(angle) * spawnDist;
+      let sy = this.player.y + Math.sin(angle) * spawnDist;
 
       sx = Math.max(20, Math.min(this.map.mapW - 20, sx));
       sy = Math.max(20, Math.min(this.map.mapH - 20, sy));
-      this.enemies.push(this._createEnemy(eDef, sx, sy));
+      const entity = this._createEnemy(eDef, sx, sy);
+
+      // 엘리트: HP 3배 + 크기 1.5배 + 빨간 테두리
+      if (i === eliteIdx) {
+        entity.hp *= 3;
+        entity.maxHp *= 3;
+        entity.scale = (entity.scale || 1) * 1.5;
+        entity.isElite = true;
+      }
+
+      this.enemies.push(entity);
     });
 
     // 중간보스 — 정면(오른쪽)에서만 등장, 속도 1.5배
@@ -959,8 +998,8 @@ export default class CombatEngine {
     this._addRage(12);
     this.petHealGauge = Math.min(100, this.petHealGauge + 4);
 
-    // Drop upgrade item (15% chance, boss guaranteed)
-    if (enemy.isBoss || Math.random() < 0.15) {
+    // Drop upgrade item (몹 한 마리당 고정 확률, 보스 확정)
+    if ((BOSS_DROP_GUARANTEED && enemy.isBoss) || Math.random() < DROP_CHANCE_PER_MOB) {
       const upg = UPGRADE_ITEMS[Math.floor(Math.random() * UPGRADE_ITEMS.length)];
       this.droppedItems.push({
         x: enemy.x, y: enemy.y,
@@ -1342,6 +1381,18 @@ export default class CombatEngine {
     ctx.beginPath();
     ctx.ellipse(sx, sy, r * squishX, r * squishY, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    // 엘리트: 빨간 빛나는 테두리
+    if (e.isElite) {
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#ff0000';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, r * squishX + 2, r * squishY + 2, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
 
     // 젤리 투명 오버레이
     const gelGrad = ctx.createRadialGradient(sx, sy, r * 0.3, sx, sy, r * squishX);

@@ -3,7 +3,7 @@ export class Player {
   constructor(x, y, stats) {
     this.x = x;
     this.y = y;
-    this.radius = 14;
+    this.radius = stats.radius || 16;
     this.speed = stats.speed || 3;
     this.hp = stats.hp || 100;
     this.maxHp = stats.maxHp || 100;

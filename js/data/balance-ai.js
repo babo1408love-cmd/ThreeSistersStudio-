@@ -24,7 +24,9 @@ const BalanceAI = {
     ice:     { emoji: '❄️', strong: ['grass','flying'], weak: ['fire','earth'],    candy: 'skyblue', buff: { slow: 0.15 } },
     earth:   { emoji: '🪨', strong: ['thunder','fire'], weak: ['water','grass'],   candy: 'brown',   buff: { def: 0.20 } },
     light:   { emoji: '✨', strong: ['dark'],           weak: [],                  candy: 'gold',    buff: { crit: 0.10 } },
-    dark:    { emoji: '🌑', strong: ['light'],          weak: [],                  candy: 'purple',  buff: { lifesteal: 0.10 } }
+    dark:    { emoji: '🌑', strong: ['light'],          weak: [],                  candy: 'purple',  buff: { lifesteal: 0.10 } },
+    wind:    { emoji: '🌪️', strong: ['grass','earth'],  weak: ['ice','thunder'],   candy: 'cyan',    buff: { speed: 0.15 } },
+    nature:  { emoji: '🌱', strong: ['water','earth'],  weak: ['fire','ice'],      candy: 'green',   buff: { regen: 0.08 } }
   },
 
   // ========== 등급 정의 ==========
@@ -71,8 +73,8 @@ const BalanceAI = {
     const rarity = options.rarity || this._weightedRarity();
     const level = options.level || 1;
 
-    const rarityData = this.RARITIES[rarity];
-    const elemData = this.ELEMENTS[element];
+    const rarityData = this.RARITIES[rarity] || this.RARITIES.common;
+    const elemData = this.ELEMENTS[element] || this.ELEMENTS.light;
 
     const hp = this.calcGrowth(rarityData.hpBase, level, rarityData.maxLevel);
     const atk = this.calcGrowth(rarityData.atkBase, level, rarityData.maxLevel);

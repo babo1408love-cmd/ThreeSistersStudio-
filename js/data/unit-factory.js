@@ -14,6 +14,26 @@ import GameState from '../core/game-state.js';
 const UnitFactory = {
 
   // ══════════════════════════════════════
+  //  주인공 기준 크기 시스템
+  // ══════════════════════════════════════
+  //  모든 유닛 크기는 주인공 신체 사이즈(HERO_BASE_RADIUS) 기반 비율
+  HERO_BASE_RADIUS: 16,
+  UNIT_SCALE: {
+    spirit:     0.625,   // 10/16 — 정령: 주인공의 62.5%
+    ally:       0.75,    // 12/16 — 동료: 주인공의 75%
+    enemy:      0.875,   // 14/16 — 일반몹: 주인공의 87.5%
+    boss:       3.0,     //        — 보스: 주인공의 3배 (scale 추가 적용)
+    pet:        0.5,     //  8/16 — 펫: 주인공의 50%
+    projSize:   0.375,   //  6/16 — 투사체: 주인공의 37.5%
+  },
+
+  /** 주인공 radius 기준으로 유닛 radius 계산 */
+  _unitRadius(type, extraScale) {
+    const base = this.HERO_BASE_RADIUS * (this.UNIT_SCALE[type] || 1);
+    return extraScale ? base * extraScale : base;
+  },
+
+  // ══════════════════════════════════════
   //  등급 매핑 (5등급 ↔ 6등급)
   // ══════════════════════════════════════
   //  spirit-generator 5등급(1~5): common/rare/magic/epic/legendary
@@ -298,7 +318,7 @@ const UnitFactory = {
         x: options.x || 0,
         y: options.y || 0,
         orbitAngle: options.orbitAngle || (options.orbitIndex || 0) * Math.PI * 0.5,
-        radius: 10,
+        radius: this._unitRadius('spirit'),
         atkTimer: Math.random() * 300,
         atkCooldown: Math.max(400, 1200 - rarity5 * 150),
         currentSkillFx: null,
@@ -390,8 +410,8 @@ const UnitFactory = {
   // ══════════════════════════════════════
   createEnemy(baseDef, scaling = 1, options = {}) {
     const s = scaling;
-    // 뱀서류 스타일: 적 HP 절반 (다수의 약한 적)
-    const hpBase = Math.round((baseDef.hp || 50) * s * 0.5);
+    // 뱀서류 스타일: 적 HP 소폭 증가 (다수의 약한 적)
+    const hpBase = Math.round((baseDef.hp || 50) * s * 0.6);
     const enemy = {
       ...baseDef,
       hp: hpBase,
@@ -410,7 +430,9 @@ const UnitFactory = {
         defense: enemy.def || baseDef.def || 2,
         speed: baseDef.spd || 1,
         gold: baseDef.gold || 5,
-        radius: (baseDef.isBoss ? (baseDef.scale || 3) : 1) * 14,
+        radius: baseDef.isBoss
+          ? this._unitRadius('boss', baseDef.scale || 1)
+          : this._unitRadius('enemy'),
         emoji: baseDef.emoji || '🩷',
         color: baseDef.color || '#FF69B4',
         isBoss: baseDef.isBoss || false,
@@ -603,7 +625,7 @@ const UnitFactory = {
       maxHp: allyDef.hp || 100,
       attack: allyDef.attack || allyDef.atk || 10,
       defense: allyDef.defense || allyDef.def || 4,
-      radius: 12,
+      radius: this._unitRadius('ally'),
       atkTimer: 0,
       atkSpeed: 500,
       emoji: allyDef.emoji || '🧚',
@@ -640,10 +662,10 @@ const UnitFactory = {
       attack: ps.attack || 10,
       defense: ps.defense || 5,
       speed: ps.speed || 3,
-      radius: 16,
+      radius: this.HERO_BASE_RADIUS,
       atkSpeed: 300,
       atkTimer: 0,
-      projSize: 6,
+      projSize: this._unitRadius('projSize'),
       projSpeed: 8,
       shotCount: 1,
       pierce: 0,
@@ -727,7 +749,8 @@ const UnitFactory = {
   },
 
   createSurvivalEnemy(config, isElite, canvasW) {
-    const size = isElite ? (config.size || 16) * 1.5 : (config.size || 16);
+    const baseSize = config.size || this._unitRadius('enemy');
+    const size = isElite ? baseSize * 1.5 : baseSize;
     const hpMult = isElite ? (config.eliteHpMultiplier || 3) : 1;
     return {
       x: (Math.random() - 0.5) * (canvasW * 0.8),
