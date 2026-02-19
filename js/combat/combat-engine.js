@@ -17,6 +17,16 @@ import AutoWalk from '../systems/auto-walk.js';
 import RageSystem from '../systems/rage-system.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
 
+// ── SpeedAI 좌표 변환 (1 AI unit = 40px) ──
+const SPEED_AI_SCALE = 40;
+
+// 게임 슬라임 타입 → SpeedAI 몹 타입 매핑
+function mapToSpeedAIMobType(enemy) {
+  if (enemy.isBoss) return 'boss_demon';
+  if (enemy.fixedSpeedMul && enemy.fixedSpeedMul > 1.3) return 'mob_wolf';
+  return 'mob_goblin';
+}
+
 // ── 업그레이드 아이템 정의 ──
 const UPGRADE_ITEMS = [
   {id:'fast_attack',  name:'빠른공격',  emoji:'🔴',color:'#FF4444',desc:'공격속도+20%',  apply:(p)=>{p.atkSpeed*=0.8;}},
@@ -161,6 +171,25 @@ export default class CombatEngine {
     });
 
     this._bindInput();
+
+    // ⚡ SpeedAI 초기화 (100유닛 동시 추격/차단/포위 AI)
+    this._speedAIReady = false;
+    this._speedAIIdCounter = 0;
+    if (window.SpeedAI) {
+      const S = SPEED_AI_SCALE;
+      SpeedAI.init(
+        Math.ceil(this.map.mapW / S),
+        Math.ceil(this.map.mapH / S)
+      );
+      SpeedAI.registerHero({
+        id: 'hero',
+        class: 'warrior',
+        x: this.player.x / S,
+        y: this.player.y / S,
+        spdStat: Math.round(this.player.speed * 3),
+      });
+      this._speedAIReady = true;
+    }
   }
 
   start() {
@@ -220,6 +249,21 @@ export default class CombatEngine {
 
     // 공중전 시스템 업데이트
     this.aerialSystem.update(dt);
+
+    // ⚡ SpeedAI: 영웅 위치 동기화 + 전체 몹 AI 업데이트 + 위치 반영
+    if (this._speedAIReady && !this.bossApproach.isBlocking()) {
+      const S = SPEED_AI_SCALE;
+      SpeedAI.setHeroTarget(this.player.x / S, this.player.y / S);
+      SpeedAI._hero.x = this.player.x / S;
+      SpeedAI._hero.y = this.player.y / S;
+      SpeedAI.update(dt / 1000);
+      // 몹 위치 역동기화 (SpeedAI → 게임 엔티티)
+      for (const e of this.enemies) {
+        if (!e._speedAIMob || !e._speedAIMob.isAlive) continue;
+        e.x = e._speedAIMob.x * S;
+        e.y = e._speedAIMob.y * S;
+      }
+    }
 
     // 보스 접근 시스템이 보스전 페이즈 → 보스방 전투 위임
     if (this.bossApproach.isInBossPhase()) {
@@ -360,7 +404,26 @@ export default class CombatEngine {
   }
 
   _createEnemy(def, x, y) {
-    return UnitFactory.createEnemy(def, 1, { x, y, combatMode: true });
+    const enemy = UnitFactory.createEnemy(def, 1, { x, y, combatMode: true });
+    // ⚡ SpeedAI 등록
+    if (this._speedAIReady) {
+      const S = SPEED_AI_SCALE;
+      enemy._speedAIId = `mob_${++this._speedAIIdCounter}`;
+      enemy._speedAIMob = SpeedAI.registerMob({
+        id: enemy._speedAIId,
+        mobType: mapToSpeedAIMobType(enemy),
+        x: x / S,
+        y: y / S,
+        level: this.stageLevel,
+        aggroRange: 200,
+        attackRange: 1,
+        patrolRadius: 5,
+      });
+      if (enemy._speedAIMob) {
+        SpeedAI.setMobAI(enemy._speedAIId, 'chase');
+      }
+    }
+    return enemy;
   }
 
   _updatePlayer(dt) {
@@ -561,25 +624,26 @@ export default class CombatEngine {
       e.bobPhase += dt * 0.005 * (e.bounceSpeed || 2);
       e.bounceY = Math.abs(Math.sin(e.bobPhase)) * 8 * (e.scale || 1);
 
-      // Move toward player
+      // Move toward player (SpeedAI가 활성이면 이동은 SpeedAI에 위임)
       const dx = this.player.x - e.x;
       const dy = this.player.y - e.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // 너무 멀면 플레이어 근처로 워프 (화면 밖 적 방지)
-      const warpCfg = ENEMY_SPEED_CONFIG;
-      if (dist > warpCfg.warpDistance) {
-        const angle = Math.atan2(dy, dx) + Math.PI;
-        const warpDist = warpCfg.warpMinDist + Math.random() * (warpCfg.warpMaxDist - warpCfg.warpMinDist);
-        e.x = this.player.x + Math.cos(angle) * warpDist;
-        e.y = this.player.y + Math.sin(angle) * warpDist;
-      } else if (dist > e.radius + this.player.radius) {
-        // 고정 속도 배율이 있으면 그걸 사용, 없으면 근접 시스템
-        const spd = e.fixedSpeedMul
-          ? this.player.speed * e.fixedSpeedMul * (dt / 16)
-          : calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
-        e.x += (dx / dist) * spd;
-        e.y += (dy / dist) * spd;
+      if (!e._speedAIMob) {
+        // SpeedAI 미등록 적: 기존 이동 로직
+        const warpCfg = ENEMY_SPEED_CONFIG;
+        if (dist > warpCfg.warpDistance) {
+          const angle = Math.atan2(dy, dx) + Math.PI;
+          const warpDist = warpCfg.warpMinDist + Math.random() * (warpCfg.warpMaxDist - warpCfg.warpMinDist);
+          e.x = this.player.x + Math.cos(angle) * warpDist;
+          e.y = this.player.y + Math.sin(angle) * warpDist;
+        } else if (dist > e.radius + this.player.radius) {
+          const spd = e.fixedSpeedMul
+            ? this.player.speed * e.fixedSpeedMul * (dt / 16)
+            : calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
+          e.x += (dx / dist) * spd;
+          e.y += (dy / dist) * spd;
+        }
       }
 
       // Clamp to map bounds
@@ -880,6 +944,11 @@ export default class CombatEngine {
   }
 
   _onEnemyDeath(enemy) {
+    // ⚡ SpeedAI에서 제거
+    if (this._speedAIReady && enemy._speedAIId) {
+      SpeedAI.removeMob(enemy._speedAIId);
+      enemy._speedAIMob = null;
+    }
     this.totalKills++;
     GameState.stats.enemiesDefeated++;
     // 적 처치 효과음 (150ms 쓰로틀)

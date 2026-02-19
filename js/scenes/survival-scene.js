@@ -20,6 +20,14 @@ import RageSystem from '../systems/rage-system.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
 import UnitFactory from '../data/unit-factory.js';
 
+// ── SpeedAI 좌표 변환 (1 AI unit = 40px) ──
+const SPEED_AI_SCALE = 40;
+function mapSurvivalMobType(enemy) {
+  if (enemy.isBoss) return 'boss_demon';
+  if (enemy.isElite) return 'mob_orc';
+  return 'mob_goblin';
+}
+
 // ── 서바이벌 맵 10종 ──
 const SURVIVAL_BIOMES = [
   { id:'forest',        name:'마법의 숲 서바이벌',     theme:'fairy_garden', emoji:'🌲' },
@@ -184,6 +192,25 @@ class SurvivalEngine {
     });
 
     this._bindInput();
+
+    // ⚡ SpeedAI 초기화 (100유닛 동시 추격/차단/포위 AI)
+    this._speedAIReady = false;
+    this._speedAIIdCounter = 0;
+    if (window.SpeedAI) {
+      const S = SPEED_AI_SCALE;
+      SpeedAI.init(
+        Math.ceil(this.map.mapW / S),
+        Math.ceil(this.map.mapH / S)
+      );
+      SpeedAI.registerHero({
+        id: 'hero',
+        class: 'warrior',
+        x: this.player.x / S,
+        y: this.player.y / S,
+        spdStat: Math.round(this.player.speed * 3),
+      });
+      this._speedAIReady = true;
+    }
   }
 
   start() {
@@ -234,6 +261,22 @@ class SurvivalEngine {
 
     // 보스 접근 시스템 업데이트
     this.bossApproach.update(dt);
+
+    // ⚡ SpeedAI: 영웅 위치 동기화 + 전체 몹 AI 업데이트 + 위치 반영
+    if (this._speedAIReady && !this.bossApproach.isBlocking()) {
+      const S = SPEED_AI_SCALE;
+      SpeedAI.setHeroTarget(this.player.x / S, this.player.y / S);
+      SpeedAI._hero.x = this.player.x / S;
+      SpeedAI._hero.y = this.player.y / S;
+      SpeedAI.update(dt / 1000);
+      // 몹 위치 역동기화 (SpeedAI → 게임 엔티티)
+      for (const e of this.enemies) {
+        if (!e._speedAIMob || !e._speedAIMob.isAlive) continue;
+        if (e.purifyState !== PURIFY_STATE.NONE) continue; // 정화 중 이동 무시
+        e.x = e._speedAIMob.x * S;
+        e.y = e._speedAIMob.y * S;
+      }
+    }
 
     // 보스 접근이 보스전 페이즈 → 보스방 전투 위임
     if (this.bossApproach.isInBossPhase()) {
@@ -324,7 +367,7 @@ class SurvivalEngine {
     const x = this.player.x + Math.cos(angle) * dist;
     const y = this.player.y + Math.sin(angle) * dist;
 
-    this.enemies.push({
+    const enemy = {
       x, y,
       hp: Math.round(def.stats.hp * scale),
       maxHp: Math.round(def.stats.hp * scale),
@@ -340,11 +383,34 @@ class SurvivalEngine {
       ai: def.ai || 'chase_slow',
       purifyState: PURIFY_STATE.NONE,
       purifyTimer: 0,
-      allyDuration: isElite ? Infinity : 60000, // 엘리트=영구, 일반=60초
+      allyDuration: isElite ? Infinity : 60000,
       bobPhase: Math.random() * Math.PI * 2,
       contactTimer: 0,
       stunSpinPhase: 0,
-    });
+      _speedAIId: null,
+      _speedAIMob: null,
+    };
+
+    // ⚡ SpeedAI 등록
+    if (this._speedAIReady) {
+      const S = SPEED_AI_SCALE;
+      enemy._speedAIId = `sv_${++this._speedAIIdCounter}`;
+      enemy._speedAIMob = SpeedAI.registerMob({
+        id: enemy._speedAIId,
+        mobType: mapSurvivalMobType(enemy),
+        x: x / S,
+        y: y / S,
+        level: this.currentWave,
+        aggroRange: 200,
+        attackRange: 1,
+        patrolRadius: 5,
+      });
+      if (enemy._speedAIMob) {
+        SpeedAI.setMobAI(enemy._speedAIId, 'chase');
+      }
+    }
+
+    this.enemies.push(enemy);
   }
 
   // ── Player (좌우 이동만) ──
@@ -505,24 +571,25 @@ class SurvivalEngine {
         continue;
       }
 
-      // AI: 플레이어 추격 — 근접 시스템 적용
+      // AI: 플레이어 추격 — SpeedAI가 활성이면 이동은 SpeedAI에 위임
       e.bobPhase += dt * 0.003;
       const dx = this.player.x - e.x;
       const dy = this.player.y - e.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // 워프: 너무 멀면 플레이어 근처로 순간이동
-      const warpCfg = ENEMY_SPEED_CONFIG;
-      if (dist > warpCfg.warpDistance) {
-        const angle = Math.atan2(dy, dx) + Math.PI;
-        const warpDist = warpCfg.warpMinDist + Math.random() * (warpCfg.warpMaxDist - warpCfg.warpMinDist);
-        e.x = this.player.x + Math.cos(angle) * warpDist;
-        e.y = this.player.y + Math.sin(angle) * warpDist;
-      } else if (dist > 1) {
-        // 근접 시스템: 원거리=주인공보다 빠름, 근거리=같은 속도
-        const spd = calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
-        e.x += (dx / dist) * spd;
-        e.y += (dy / dist) * spd;
+      if (!e._speedAIMob) {
+        // SpeedAI 미등록 적: 기존 이동 로직
+        const warpCfg = ENEMY_SPEED_CONFIG;
+        if (dist > warpCfg.warpDistance) {
+          const angle = Math.atan2(dy, dx) + Math.PI;
+          const warpDist = warpCfg.warpMinDist + Math.random() * (warpCfg.warpMaxDist - warpCfg.warpMinDist);
+          e.x = this.player.x + Math.cos(angle) * warpDist;
+          e.y = this.player.y + Math.sin(angle) * warpDist;
+        } else if (dist > 1) {
+          const spd = calcEnemySpeed(dist, this.player.speed, e.isBoss) * (dt / 16);
+          e.x += (dx / dist) * spd;
+          e.y += (dy / dist) * spd;
+        }
       }
 
       // 접촉 데미지
@@ -595,6 +662,11 @@ class SurvivalEngine {
 
   // ── Enemy Death → Purify Check ──
   _onEnemyDeath(enemy, index) {
+    // ⚡ SpeedAI에서 제거
+    if (this._speedAIReady && enemy._speedAIId) {
+      SpeedAI.removeMob(enemy._speedAIId);
+      enemy._speedAIMob = null;
+    }
     this.totalKills++;
     const gold = Math.round((5 + Math.random() * 10) * this.goldMultiplier);
     this.totalGold += gold;
@@ -616,6 +688,11 @@ class SurvivalEngine {
     const purifyChance = Math.max(5, this.basePurifyChance - this.currentWave * 0.5 + this.purifyBonusChance);
     if (Math.random() * 100 < purifyChance) {
       // 정화 성공! 적을 죽이지 않고 빙빙 도는 상태로 전환
+      // ⚡ SpeedAI에서 제거 (정화 중 이동 안 함)
+      if (this._speedAIReady && enemy._speedAIId) {
+        SpeedAI.removeMob(enemy._speedAIId);
+        enemy._speedAIMob = null;
+      }
       enemy.hp = enemy.maxHp * 0.5;
       enemy.purifyState = PURIFY_STATE.STUNNED;
       enemy.purifyTimer = 0;
