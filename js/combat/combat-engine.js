@@ -16,16 +16,7 @@ import BossApproachSystem from '../systems/boss-approach.js';
 import AutoWalk from '../systems/auto-walk.js';
 import RageSystem from '../systems/rage-system.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
-
-// ── SpeedAI 좌표 변환 (1 AI unit = 40px) ──
-const SPEED_AI_SCALE = 40;
-
-// 게임 슬라임 타입 → SpeedAI 몹 타입 매핑
-function mapToSpeedAIMobType(enemy) {
-  if (enemy.isBoss) return 'boss_demon';
-  if (enemy.fixedSpeedMul && enemy.fixedSpeedMul > 1.3) return 'mob_wolf';
-  return 'mob_goblin';
-}
+import HeroEngine from '../systems/hero-engine.js';
 
 // ── 업그레이드 아이템 정의 ──
 const UPGRADE_ITEMS = [
@@ -172,24 +163,20 @@ export default class CombatEngine {
 
     this._bindInput();
 
-    // ⚡ SpeedAI 초기화 (100유닛 동시 추격/차단/포위 AI)
-    this._speedAIReady = false;
-    this._speedAIIdCounter = 0;
-    if (window.SpeedAI) {
-      const S = SPEED_AI_SCALE;
-      SpeedAI.init(
-        Math.ceil(this.map.mapW / S),
-        Math.ceil(this.map.mapH / S)
-      );
-      SpeedAI.registerHero({
-        id: 'hero',
-        class: 'warrior',
-        x: this.player.x / S,
-        y: this.player.y / S,
-        spdStat: Math.round(this.player.speed * 3),
+    // ⚡ HeroEngine — 모든 생성기 통합 영웅 시스템
+    this.heroEngine = new HeroEngine(this.player, {
+      mapWidth: this.map.mapW,
+      mapHeight: this.map.mapH,
+      stageLevel: this.stageLevel,
+    });
+    // 레벨업 시 파티클 이펙트
+    this.heroEngine.onLevelUp = (result) => {
+      this.particles.push({
+        x: this.player.x, y: this.player.y - 40,
+        text: `⬆️ Lv.${this.heroEngine.getLevel()}!`, color: '#fbbf24', type: 'text',
+        life: 2500, vy: -0.6, vx: 0,
       });
-      this._speedAIReady = true;
-    }
+    };
   }
 
   start() {
@@ -211,6 +198,7 @@ export default class CombatEngine {
     this.running = false;
     if (this._animFrame) cancelAnimationFrame(this._animFrame);
     this._unbindInput();
+    if (this.heroEngine) this.heroEngine.destroy();
   }
 
   _loop() {
@@ -250,19 +238,9 @@ export default class CombatEngine {
     // 공중전 시스템 업데이트
     this.aerialSystem.update(dt);
 
-    // ⚡ SpeedAI: 영웅 위치 동기화 + 전체 몹 AI 업데이트 + 위치 반영
-    if (this._speedAIReady && !this.bossApproach.isBlocking()) {
-      const S = SPEED_AI_SCALE;
-      SpeedAI.setHeroTarget(this.player.x / S, this.player.y / S);
-      SpeedAI._hero.x = this.player.x / S;
-      SpeedAI._hero.y = this.player.y / S;
-      SpeedAI.update(dt / 1000);
-      // 몹 위치 역동기화 (SpeedAI → 게임 엔티티)
-      for (const e of this.enemies) {
-        if (!e._speedAIMob || !e._speedAIMob.isAlive) continue;
-        e.x = e._speedAIMob.x * S;
-        e.y = e._speedAIMob.y * S;
-      }
+    // ⚡ HeroEngine: SpeedAI 동기화 + 전술 AI + 스킬 쿨다운 + 위험도
+    if (!this.bossApproach.isBlocking()) {
+      this.heroEngine.update(dt, this.enemies, this.bossApproach.isInBossPhase());
     }
 
     // 보스 접근 시스템이 보스전 페이즈 → 보스방 전투 위임
@@ -405,24 +383,8 @@ export default class CombatEngine {
 
   _createEnemy(def, x, y) {
     const enemy = UnitFactory.createEnemy(def, 1, { x, y, combatMode: true });
-    // ⚡ SpeedAI 등록
-    if (this._speedAIReady) {
-      const S = SPEED_AI_SCALE;
-      enemy._speedAIId = `mob_${++this._speedAIIdCounter}`;
-      enemy._speedAIMob = SpeedAI.registerMob({
-        id: enemy._speedAIId,
-        mobType: mapToSpeedAIMobType(enemy),
-        x: x / S,
-        y: y / S,
-        level: this.stageLevel,
-        aggroRange: 200,
-        attackRange: 1,
-        patrolRadius: 5,
-      });
-      if (enemy._speedAIMob) {
-        SpeedAI.setMobAI(enemy._speedAIId, 'chase');
-      }
-    }
+    // ⚡ HeroEngine에 몹 등록 (SpeedAI 추격/포위 AI)
+    this.heroEngine.registerMob(enemy, x, y);
     return enemy;
   }
 
@@ -592,6 +554,22 @@ export default class CombatEngine {
   }
 
   _updateAutoAttack(dt) {
+    // ⚡ HeroEngine 스킬 자동 발동 (행동 연계)
+    const pendingSkill = this.heroEngine.getPendingSkill();
+    if (pendingSkill && this.enemies.length > 0) {
+      const skillTarget = this._findNearest(this.player, this.enemies);
+      if (skillTarget && this._dist(this.player, skillTarget) < 500) {
+        const result = this.heroEngine.fireSkill(skillTarget);
+        if (result) {
+          this.particles.push({
+            x: this.player.x, y: this.player.y - 30,
+            text: `✨${result.skill.name}`, color: '#c084fc', type: 'text',
+            life: 1200, vy: -0.8, vx: 0,
+          });
+        }
+      }
+    }
+
     this.player.atkTimer -= dt;
     if (this.player.atkTimer <= 0 && this.enemies.length > 0) {
       const nearest = this._findNearest(this.player, this.enemies);
@@ -944,11 +922,8 @@ export default class CombatEngine {
   }
 
   _onEnemyDeath(enemy) {
-    // ⚡ SpeedAI에서 제거
-    if (this._speedAIReady && enemy._speedAIId) {
-      SpeedAI.removeMob(enemy._speedAIId);
-      enemy._speedAIMob = null;
-    }
+    // ⚡ HeroEngine: EXP + SpeedAI 제거
+    this.heroEngine.onEnemyKill(enemy);
     this.totalKills++;
     GameState.stats.enemiesDefeated++;
     // 적 처치 효과음 (150ms 쓰로틀)
@@ -1125,6 +1100,9 @@ export default class CombatEngine {
 
     // 🍄 보스 접근 붉은 안개 (우측에서 접근)
     this.bossApproach.draw(ctx, this.camera, this.W, this.H);
+
+    // ⚡ HeroEngine 스킬 이펙트
+    this.heroEngine.drawSkillFx(ctx, this.camera);
 
     // Dropped items (on ground)
     this.droppedItems.forEach(item => {
