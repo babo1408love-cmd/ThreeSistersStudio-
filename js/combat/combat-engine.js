@@ -89,7 +89,7 @@ export default class CombatEngine {
     this.currentWave = 0;
     this.waveSpawned = false;
     this.waveTimer = 0;
-    this.waveDelay = 10000;  // 10초마다 웨이브
+    this.waveDelay = 7000;   // 7초마다 웨이브
     this.totalKills = 0;
     this.totalGold = 0;
     this._animFrame = null;
