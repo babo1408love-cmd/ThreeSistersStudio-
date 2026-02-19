@@ -35,14 +35,19 @@ export default class AutoWalk {
     this.running = false;
     this._paused = false;
 
-    // 보스 접근 속도 설정 (스테이지별 오버라이드)
-    const cfg = BOSS_APPROACH_CONFIG;
-    const override = cfg.stageOverrides[this.stageLevel] || {};
-    this._bossBaseSpeed = override.baseSpeed ?? cfg.baseSpeed;
-    this._bossAccel = override.accel ?? cfg.accel;
+    // autoWalkSpeed 직접 지정 시 계산 생략 (공중전 등)
+    if (options.autoWalkSpeed) {
+      this.speed = options.autoWalkSpeed;
+    } else {
+      // 보스 접근 속도 설정 (스테이지별 오버라이드)
+      const bossConfig = options.bossApproachConfig || BOSS_APPROACH_CONFIG;
+      const override = bossConfig.stageOverrides?.[this.stageLevel] || {};
+      this._bossBaseSpeed = override.baseSpeed ?? bossConfig.baseSpeed;
+      this._bossAccel = override.accel ?? bossConfig.accel;
 
-    // 3분에 보스를 만나는 속도 계산
-    this.speed = this._calculateSpeed();
+      // 3분에 보스를 만나는 속도 계산
+      this.speed = this._calculateSpeed();
+    }
   }
 
   /**

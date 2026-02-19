@@ -1303,6 +1303,42 @@ export function generateSurvivorMap(options = {}) {
 }
 
 /**
+ * 공중전 맵 생성 — 뱀서류 맵의 절반 거리
+ * cloud_realm 테마 기본, 하늘 배경
+ *
+ * ★ 거리 계산:
+ *   지상 뱀서류 scrollDist ≈ 88,313px (stage1, 3분)
+ *   공중전 = 절반 ≈ 44,156px
+ *   scroll: speed=0.325, accel=0.00004 → 44,156px in 3분
+ *
+ * @param {object} options
+ * @param {string}  options.themeId     - 테마 키 (기본 'cloud_realm')
+ * @param {number}  options.stageLevel  - 스테이지 레벨
+ * @param {number}  options.duration    - 게임 시간 ms (기본 180000)
+ * @param {number}  options.scrollSpeed - 스크롤 속도 (기본 0.325)
+ * @param {number}  options.scrollAccel - 스크롤 가속 (기본 0.00004)
+ * @param {number}  options.seed        - 시드
+ * @returns {object} 공중전 맵 데이터 (survivorMap 호환 구조)
+ */
+export function generateAerialMap(options = {}) {
+  // 절반 거리 기본값
+  const scrollSpeed = options.scrollSpeed || 0.325;
+  const scrollAccel = options.scrollAccel || 0.00004;
+
+  return generateSurvivorMap({
+    themeId: options.themeId || 'cloud_realm',
+    stageLevel: options.stageLevel || 1,
+    duration: options.duration || 180000,
+    scrollSpeed,
+    scrollAccel,
+    height: options.height || 25,
+    arenaWidth: options.arenaWidth || 100,
+    arenaHeight: options.arenaHeight || 50,
+    seed: options.seed || Date.now(),
+  });
+}
+
+/**
  * 서바이벌 맵 렌더링 (열 기반 최적화)
  * — 보이는 열의 오브젝트만 렌더링
  * — 배틀아레나 영역 시각적 강조

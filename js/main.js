@@ -20,6 +20,7 @@ import ShopScene from './scenes/shop-scene.js';
 import ArenaScene from './scenes/arena-scene.js';
 import CodexScene from './scenes/codex-scene.js';
 import RankingScene from './scenes/ranking-scene.js';
+import AerialScene from './scenes/aerial-scene.js';
 
 // UI
 import { openInventory, closeInventory } from './ui/inventory-ui.js';
@@ -40,6 +41,7 @@ const SCENE_BGM = {
   arena:      'boss',
   codex:      'rest',
   ranking:    'rest',
+  aerial:     'boss',
 };
 
 // Initialize
@@ -110,6 +112,7 @@ function init() {
   SceneManager.register('arena', ArenaScene);
   SceneManager.register('codex', CodexScene);
   SceneManager.register('ranking', RankingScene);
+  SceneManager.register('aerial', AerialScene);
 
   // Global inventory button handler
   document.addEventListener('click', (e) => {
@@ -211,5 +214,10 @@ window.cheat = {
       GameState.spiritItems.push({ id: Date.now() + i, name: '치트 조각', emoji: '✨', type: 'spirit_part', part: ['head','body','wings','legs','aura','core'][i%6], rarity: 'common', spiritKey: 'fairy' });
     }
     SaveManager.save(); console.log(`조각 ${count}개 추가! 총 ${GameState.spiritItems.length}개`);
+  },
+  /** 공중전 테스트 진입: cheat.aerial() */
+  aerial() {
+    console.log('☁️ 공중전 테스트 모드 진입...');
+    SceneManager.go('aerial');
   },
 };

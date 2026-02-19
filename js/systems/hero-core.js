@@ -45,7 +45,7 @@ import StageDirector from './stage-director.js';
 // ── 생성기 ──
 import { generateSpirit, generateFairy, drawSpirit, drawFairy } from '../generators/spirit-generator.js';
 import { renderAttack, getSkillByTier, getAvailableSkills } from '../generators/spirit-attack-generator.js';
-import { generateMap, renderMap, generateSurvivorMap, renderSurvivorMap } from '../generators/map-generator.js';
+import { generateMap, renderMap, generateSurvivorMap, renderSurvivorMap, generateAerialMap } from '../generators/map-generator.js';
 import { ENEMIES, BOSSES, generateWave, generateDrop } from '../generators/enemy-drop-generator.js';
 import { HeroManager, HERO_CLASSES } from '../generators/hero-upgrade.js';
 import { SummonTree, FRAGMENT_PARTS } from '../generators/summon-evolution.js';
@@ -58,6 +58,9 @@ import AutoScroll from './auto-scroll.js';
 import AutoWalk from './auto-walk.js';
 import { RARITY, rollSummonRarity, getRarityInfo, getRarityStats, getRarityColor } from './rarity-manager.js';
 import { PET_EVOLUTION, PET_EVOLUTION_POOL } from './pet-evolution-system.js';
+
+// ── 공중전 설정 ──
+import { AERIAL_SCROLL_CONFIG, AERIAL_WALK_CONFIG, AERIAL_BOSS_APPROACH_CONFIG } from '../combat/aerial-combat-system.js';
 
 // ── 가챠 ──
 import { autoMatchParts, countLegendFragments, determineSummonResult } from '../data/spirit-parts-config.js';
@@ -214,6 +217,7 @@ export default class HeroCore {
    */
   mountCombat(opts = {}) {
     const stageLevel = opts.stageLevel || GameState.currentStage || 1;
+    const isAerial = opts.aerial || false;
 
     // 스테이지 계획
     const plan = opts.plan || StageDirector.prepare(stageLevel);
@@ -222,6 +226,12 @@ export default class HeroCore {
     // 맵 생성
     if (opts.map) {
       this.combat.map = opts.map;
+    } else if (isAerial) {
+      // 공중전: 절반 거리 맵
+      this.combat.map = generateAerialMap({
+        themeId: plan.map.themeId || 'cloud_realm',
+        stageLevel: plan.map.stageLevel,
+      });
     } else {
       this.combat.map = generateSurvivorMap({
         themeId: plan.map.themeId,
@@ -281,21 +291,37 @@ export default class HeroCore {
     this.systems.timer = new StageTimer({ duration: 180000 });
 
     // 자동 스크롤
-    this.systems.autoScroll = new AutoScroll({
-      speed: plan.map.scrollSpeed,
-      direction: 'horizontal',
-      startBoundary: 0,
-      warningZone: 120,
-      damagePerSec: 20 + stageLevel * 2,
-      pushForce: 2.0,
-      accel: plan.map.scrollAccel,
-    });
-
-    // 자동 전진
-    this.systems.autoWalk = new AutoWalk({
-      mapWidth: map.mapW,
-      stageLevel,
-    });
+    if (isAerial) {
+      // 공중전: 절반 거리 설정
+      this.systems.autoScroll = new AutoScroll({
+        speed: AERIAL_SCROLL_CONFIG.speed,
+        direction: AERIAL_SCROLL_CONFIG.direction,
+        startBoundary: 0,
+        warningZone: AERIAL_SCROLL_CONFIG.warningZone,
+        damagePerSec: AERIAL_SCROLL_CONFIG.damagePerSec,
+        pushForce: AERIAL_SCROLL_CONFIG.pushForce,
+        accel: AERIAL_SCROLL_CONFIG.accel,
+      });
+      this.systems.autoWalk = new AutoWalk({
+        mapWidth: map.mapW,
+        stageLevel,
+        autoWalkSpeed: AERIAL_WALK_CONFIG.autoWalkSpeed,
+      });
+    } else {
+      this.systems.autoScroll = new AutoScroll({
+        speed: plan.map.scrollSpeed,
+        direction: 'horizontal',
+        startBoundary: 0,
+        warningZone: 120,
+        damagePerSec: 20 + stageLevel * 2,
+        pushForce: 2.0,
+        accel: plan.map.scrollAccel,
+      });
+      this.systems.autoWalk = new AutoWalk({
+        mapWidth: map.mapW,
+        stageLevel,
+      });
+    }
 
     this.combat.active = true;
     this.emit('combatMount', { stageLevel, plan });

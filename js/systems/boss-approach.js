@@ -53,23 +53,23 @@ export default class BossApproachSystem {
     this.bossTheme = options.bossTheme || stageMapping?.theme || 'forest_clearing';
     this.bossType = options.bossType || stageMapping?.bossType || 'boss_infected_elder';
 
-    // 스테이지별 오버라이드 적용
-    const cfg = BOSS_APPROACH_CONFIG;
-    const override = cfg.stageOverrides[this.stageLevel] || {};
+    // 스테이지별 오버라이드 적용 (options.approachConfig로 외부 설정 주입 가능)
+    const cfg = options.approachConfig || BOSS_APPROACH_CONFIG;
+    const override = cfg.stageOverrides?.[this.stageLevel] || {};
     this.baseSpeed = override.baseSpeed ?? cfg.baseSpeed;
     this.accel = override.accel ?? cfg.accel;
     this.speed = this.baseSpeed;
 
     // 설정 값
-    this.warningZone = cfg.warningZone;
-    this.timerAccelMultiplier = cfg.timerAccelMultiplier;
-    this.timerAccelMinSpeed = cfg.timerAccelMinSpeed;
-    this.minGap = cfg.minGap;
-    this.arenaFormDuration = cfg.arenaFormDuration;
-    this.meetingDuration = cfg.meetingDuration;
-    this.startDelay = cfg.startDelay;
+    this.warningZone = cfg.warningZone || 150;
+    this.timerAccelMultiplier = cfg.timerAccelMultiplier || 5.0;
+    this.timerAccelMinSpeed = cfg.timerAccelMinSpeed || 8.0;
+    this.minGap = cfg.minGap || 300;
+    this.arenaFormDuration = cfg.arenaFormDuration || 1500;
+    this.meetingDuration = cfg.meetingDuration || 500;
+    this.startDelay = cfg.startDelay || 5000;
     this.bossRoomTimeLimit = cfg.bossRoomTimeLimit || 300000;
-    this.visual = cfg.visual;
+    this.visual = cfg.visual || BOSS_APPROACH_CONFIG.visual;
 
     // 상태
     this.phase = PHASE.DORMANT;

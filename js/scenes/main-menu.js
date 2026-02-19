@@ -66,6 +66,7 @@ export default class MainMenuScene {
           <button class="mm-nav-btn" id="btn-codex">📖<br>도감</button>
           <button class="mm-nav-btn" id="btn-settings">⚙️<br>설정</button>
           <button class="mm-nav-btn" id="btn-ranking">🏆<br>랭킹</button>
+          <button class="mm-nav-btn" id="btn-aerial" style="border:1px solid #67e8f9;">☁️<br>공중전</button>
         </div>` : ''}
 
         <div class="main-menu__version">v2.0 — 몽글벨</div>
@@ -119,6 +120,7 @@ export default class MainMenuScene {
       bind('#btn-codex', () => SceneManager.go('codex'));
       bind('#btn-settings', () => openSettings());
       bind('#btn-ranking', () => SceneManager.go('ranking'));
+      bind('#btn-aerial', () => SceneManager.go('aerial'));
     }
 
     // Show login reward popup

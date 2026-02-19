@@ -40,32 +40,43 @@ export const AERIAL_SPEED_CONFIG = {
 };
 
 // ── 공중전 자동 스크롤 (하늘 바람이 밀려옴) ──
+// ★ 지상 뱀서류의 절반 거리: 44,156px in 3분
+//   검증: (0.325 * 180000 + 0.5 * 0.00004 * 180000²) / 16 = 44,156px ✓
 export const AERIAL_SCROLL_CONFIG = {
-  speed: 1.0,                     // 뱀서류보다 25% 빠름 (바람 효과)
+  speed: 0.325,                   // 절반 거리 맞춤 (지상 0.65 의 50%)
   direction: 'horizontal',
   startBoundary: 0,
   warningZone: 100,               // 경고 구간 좁음 (빠른 반응 필요)
   damagePerSec: 30,               // 하늘 바깥 데미지 (높음)
   pushForce: 2.5,                 // 강한 바람 밀어내기
-  accel: 0.00012,                 // 뱀서류보다 빠른 가속
+  accel: 0.00004,                 // 절반 거리 맞춤 (지상 0.00008 의 50%)
 };
 
 // ── 공중전 자동 전진 (보스와 3분에 만남) ──
+// ★ autoWalkSpeed 계산:
+//   맵 총 폭 ≈ 50,160px, 보스 이동거리 ≈ 16,875px
+//   플레이어 커버 = 50,160 - 16,875 - 200 = 33,085px
+//   speed = 33,085 × 16 / 180,000 ≈ 2.94 px/frame
 export const AERIAL_WALK_CONFIG = {
   timerDuration: 180000,          // 3분
+  autoWalkSpeed: 2.94,            // 절반 맵용 자동전진 속도 (px/frame @60fps)
 };
 
-// ── 공중전 보스 접근 (뱀서류 BOSS_APPROACH_CONFIG 복사 + 공중전 특화) ──
+// ── 공중전 보스 접근 (절반 거리 맞춤) ──
+// ★ 보스 이동거리 계산:
+//   (0.15 * 180000 + 0.5 * 0.000015 * 180000²) / 16 = 16,875px
+//   플레이어 33,085px + 보스 16,875px + 마진 200px ≈ 50,160px (맵 전체) ✓
 export const AERIAL_BOSS_APPROACH_CONFIG = {
-  baseSpeed: 0.4,                 // 뱀서류보다 33% 빠름 (공중 보스는 빠르게 접근)
-  accel: 0.00006,                 // 가속도 증가
+  baseSpeed: 0.15,                // 절반 맵용 (지상 0.3 의 50%)
+  accel: 0.000015,                // 절반 맵용 가속
   warningZone: 120,
-  timerAccelMultiplier: 6.0,      // 타이머 종료 후 6배 속도 (급접근)
-  timerAccelMinSpeed: 10.0,       // 최소 속도 높음
-  minGap: 250,                    // 스크롤과 최소 간격 (좁음 → 긴장감)
+  timerAccelMultiplier: 5.0,      // 타이머 종료 후 5배 속도
+  timerAccelMinSpeed: 8.0,        // 최소 속도
+  minGap: 250,                    // 스크롤과 최소 간격
   arenaFormDuration: 1200,        // 아레나 형성 빠름
   meetingDuration: 400,
-  startDelay: 3000,               // 5초→3초 (공중전은 바로 시작)
+  startDelay: 3000,               // 3초 후 시작
+  bossRoomTimeLimit: 300000,
   visual: {
     fogColorInner: 'rgba(30,0,60,0.9)',   // 보라색 하늘 안개
     fogColorOuter: 'rgba(80,20,120,0)',
@@ -74,10 +85,10 @@ export const AERIAL_BOSS_APPROACH_CONFIG = {
     warningEmoji: '\u26A1',                // ⚡
   },
   stageOverrides: {
-    1: { baseSpeed: 0.3, accel: 0.00004 },
-    2: { baseSpeed: 0.4, accel: 0.00006 },
-    3: { baseSpeed: 0.45, accel: 0.00007 },
-    4: { baseSpeed: 0.5, accel: 0.00008 },
+    1: { baseSpeed: 0.12, accel: 0.000012 },
+    2: { baseSpeed: 0.15, accel: 0.000015 },
+    3: { baseSpeed: 0.18, accel: 0.000018 },
+    4: { baseSpeed: 0.20, accel: 0.000020 },
   },
 };
 

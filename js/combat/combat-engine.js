@@ -11,7 +11,7 @@ import { ENEMIES, BOSSES, generateWave, generateDrop } from '../generators/enemy
 import { generateMap, renderMap, generateSurvivorMap, renderSurvivorMap } from '../generators/map-generator.js';
 import { renderAttack, getSkillByTier } from '../generators/spirit-attack-generator.js';
 import BossRoomSystem, { BOSS_ROOM_PHASE } from './boss-room-system.js';
-import AerialCombatSystem from './aerial-combat-system.js';
+import AerialCombatSystem, { AERIAL_BOSS_APPROACH_CONFIG } from './aerial-combat-system.js';
 import UnitFactory from '../data/unit-factory.js';
 import BossApproachSystem from '../systems/boss-approach.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
@@ -42,6 +42,7 @@ export default class CombatEngine {
     this.maxWaves = options.maxWaves || 4;
     this.onVictory = options.onVictory || (() => {});
     this.onDeath = options.onDeath || (() => {});
+    this._aerial = options.aerial || false;
 
     // ══════════════════════════════════════
     //  HeroCore 허브 — 모든 것이 주인공에 탑재
@@ -52,6 +53,8 @@ export default class CombatEngine {
     const combatData = this.hero.mountCombat({
       stageLevel: this.stageLevel,
       plan: options.plan,
+      map: options.map,
+      aerial: options.aerial,
     });
 
     // 전투 데이터를 로컬 참조 (기존 코드 호환)
@@ -124,6 +127,7 @@ export default class CombatEngine {
       mapHeight: this.map.mapH,
       stageLevel: this.stageLevel,
       autoScroll: this.autoScroll,
+      approachConfig: this._aerial ? AERIAL_BOSS_APPROACH_CONFIG : undefined,
     });
 
     this._bindInput();
