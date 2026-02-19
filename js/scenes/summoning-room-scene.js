@@ -12,11 +12,54 @@ import { PET_EVOLUTION, PET_EVOLUTION_POOL } from '../systems/pet-evolution-syst
 import { hasSummonTutorialSeen, showSummonTutorial } from '../ui/summon-tutorial.js';
 import { HERO_ROSTER } from '../data/hero-config.js';
 import { HERO_SLOT_CONFIG, isSlotUnlocked, canEquipHero } from '../data/inventory-config.js';
+import { drawSpirit, ATTR_INFO, BODY_SHAPES, EYE_STYLES, DECORATIONS, WING_TYPES } from '../generators/spirit-generator.js';
+
+// 등급 문자열 → 숫자 매핑 (spirit-generator는 숫자 rarity 사용)
+const RARITY_TO_NUM = { common: 1, rare: 2, magic: 3, epic: 4, legendary: 5 };
+// 정령 키 → 속성 매핑 (spirits.js에 attribute 필드가 없으므로)
+const KEY_TO_ATTR = {
+  fairy:'light', mushroom:'nature', candy:'light', water:'water',
+  diamond:'ice', star:'light', moon:'dark', thunder:'lightning',
+  blossom:'nature', crystal:'ice', rainbow:'light', fire:'fire',
+  ice:'ice', cosmos:'dark', phoenix_lord:'fire', void_dragon:'dark',
+};
+
+// ── 정령 비주얼 생성 (spirit-generator 연동) ──
+function _pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/** 소환된 정령에 시각 속성 부여 (bodyShape, eyeStyle 등) */
+function enrichSpiritVisual(spirit) {
+  if (spirit.bodyShape) return spirit; // 이미 비주얼 있으면 스킵
+  const attr = spirit.attribute || KEY_TO_ATTR[spirit.key] || 'light';
+  spirit.attribute = attr;
+  spirit.bodyShape = _pick(BODY_SHAPES).id;
+  spirit.eyeStyle = _pick(EYE_STYLES).id;
+  spirit.decoration = _pick(DECORATIONS).id;
+  spirit.wingType = _pick(WING_TYPES).id;
+  spirit.rarityNum = RARITY_TO_NUM[spirit.rarity] || 1;
+  return spirit;
+}
+
+/** 정령을 Canvas에 그려서 dataURL 반환 (캐싱용) */
+function renderSpiritToImage(spirit, size = 80) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  // drawSpirit은 숫자 rarity 필요
+  const drawData = {
+    ...spirit,
+    rarity: spirit.rarityNum || RARITY_TO_NUM[spirit.rarity] || 1,
+  };
+  drawSpirit(ctx, drawData, size / 2, size / 2, size * 0.8);
+  return canvas.toDataURL();
+}
 
 export default class SummoningRoomScene {
   onCreate() {
     this._revealOverlay = null;
     this._activeTab = 'summon'; // 'summon' | 'pet'
+    this._spiritImageCache = {}; // id → dataURL 캐시
   }
 
   render() {
@@ -293,11 +336,12 @@ export default class SummoningRoomScene {
     }
   }
 
-  // ── 정령 스택 렌더 (같은 속성+등급 묶기 + 삭제 버튼) ──
+  // ── 정령 스택 렌더 (Canvas 비주얼 + 삭제 버튼) ──
   _renderSpiritStacks(spirits) {
     if (spirits.length === 0) return '';
     const stacks = {};
     for (const s of spirits) {
+      enrichSpiritVisual(s); // 비주얼 없으면 생성
       const key = `${s.key || s.name}_${s.rarity}`;
       if (!stacks[key]) stacks[key] = { spirit: s, count: 0, ids: [] };
       stacks[key].count++;
@@ -306,8 +350,18 @@ export default class SummoningRoomScene {
     return Object.values(stacks).map(({ spirit, count, ids }) => {
       const rColor = RARITY_COLORS[spirit.rarity] || '#86efac';
       const firstId = ids[0];
-      return `<div class="spirit-slot filled" style="border-color:${rColor};position:relative;cursor:pointer;" title="${spirit.name} (${RARITY_NAMES[spirit.rarity] || spirit.rarity})${spirit.ability ? '\n' + spirit.ability.description : ''}\n클릭: 삭제" data-spirit-id="${firstId}" data-spirit-key="${spirit.key || spirit.name}" data-spirit-rarity="${spirit.rarity}">
-        ${spirit.emoji}
+      const attrInfo = ATTR_INFO[spirit.attribute] || { emoji:'✨', color:'#FFD700' };
+
+      // Canvas 이미지 생성 (캐싱)
+      const cacheKey = `${spirit.key}_${spirit.rarity}_${spirit.bodyShape}`;
+      if (!this._spiritImageCache[cacheKey]) {
+        this._spiritImageCache[cacheKey] = renderSpiritToImage(spirit, 56);
+      }
+      const imgUrl = this._spiritImageCache[cacheKey];
+
+      return `<div class="spirit-slot filled" style="border-color:${rColor};position:relative;cursor:pointer;flex-direction:column;gap:2px;" title="${spirit.name} (${RARITY_NAMES[spirit.rarity] || spirit.rarity})${spirit.ability ? '\n' + spirit.ability.description : ''}\n클릭: 삭제" data-spirit-id="${firstId}" data-spirit-key="${spirit.key || spirit.name}" data-spirit-rarity="${spirit.rarity}">
+        <img src="${imgUrl}" width="48" height="48" style="image-rendering:pixelated;filter:drop-shadow(0 0 4px ${attrInfo.color});">
+        <span style="font-size:0.5em;color:${rColor};white-space:nowrap;overflow:hidden;max-width:60px;text-align:center;">${spirit.name}</span>
         ${count > 1 ? `<span style="position:absolute;top:-4px;right:-4px;background:${rColor};color:#000;font-size:10px;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-weight:700;">×${count}</span>` : ''}
         <span class="spirit-delete-badge" style="position:absolute;bottom:-4px;right:-4px;background:#ff4444;color:#fff;font-size:8px;border-radius:50%;width:14px;height:14px;display:flex;align-items:center;justify-content:center;font-weight:700;cursor:pointer;">✕</span>
       </div>`;
@@ -338,13 +392,13 @@ export default class SummoningRoomScene {
     const usedIdSet = new Set(matchResult.usedIds);
     GameState.spiritItems = GameState.spiritItems.filter(item => !usedIdSet.has(item.id));
 
-    // 정령 인스턴스 생성
-    const spirit = {
+    // 정령 인스턴스 생성 + 비주얼 부여
+    const spirit = enrichSpiritVisual({
       ...resultSpirit,
       id: Date.now(),
       level: 1,
       exp: 0
-    };
+    });
     GameState.summonSpirit(spirit);
 
     // HeroAI 자동 등록 (주인공 흡수)
@@ -369,7 +423,7 @@ export default class SummoningRoomScene {
       const usedIdSet = new Set(matchResult.usedIds);
       GameState.spiritItems = GameState.spiritItems.filter(item => !usedIdSet.has(item.id));
 
-      const spirit = { ...resultSpirit, id: Date.now() + summoned.length, level: 1, exp: 0 };
+      const spirit = enrichSpiritVisual({ ...resultSpirit, id: Date.now() + summoned.length, level: 1, exp: 0 });
       GameState.summonSpirit(spirit);
       this._absorbSpiritToHero(spirit);
       summoned.push(spirit);
@@ -412,9 +466,16 @@ export default class SummoningRoomScene {
   _showSummonReveal(spirit) {
     showConfetti();
 
+    // 비주얼 보강 (혹시 없으면)
+    enrichSpiritVisual(spirit);
+
     const rarityId = spirit.rarityId || 1;
     const rarityInfo = getRarityInfo(rarityId);
     const badgeClass = ({common:'green',rare:'purple',magic:'cyan',epic:'gold',legendary:'red'})[spirit.rarity] || 'green';
+    const attrInfo = ATTR_INFO[spirit.attribute] || { name:'빛', emoji:'✨', color:'#FFD700' };
+
+    // Canvas로 정령 이미지 생성
+    const spiritImgUrl = renderSpiritToImage(spirit, 120);
 
     // 흡수 보너스 표시
     const atkBonus = spirit.stats?.attack || 10;
@@ -423,7 +484,10 @@ export default class SummoningRoomScene {
     const overlay = document.createElement('div');
     overlay.className = 'summon-reveal';
     overlay.innerHTML = `
-      <div class="summon-reveal__spirit" style="font-size:80px;">${spirit.emoji}</div>
+      <div class="summon-reveal__spirit" style="position:relative;">
+        <img src="${spiritImgUrl}" width="120" height="120" style="image-rendering:pixelated;filter:drop-shadow(0 0 12px ${attrInfo.color});animation:summonReveal 1s ease-out;">
+        <div style="font-size:0.8em;color:${attrInfo.color};margin-top:4px;">${attrInfo.emoji} ${attrInfo.name} 속성</div>
+      </div>
       <div class="summon-reveal__name" style="font-size:1.3em;font-weight:700;margin:8px 0;">${spirit.name}</div>
       <div style="margin:8px 0;">
         <span class="badge badge-${badgeClass}" style="font-size:1em;">
