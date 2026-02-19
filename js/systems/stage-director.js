@@ -26,20 +26,20 @@ const THEME_DENSITY = {
   demon_castle: { trees: 0.02, rocks: 0.06, flowers: 0.00, mushrooms: 0.03 },
 };
 
-// ── 스테이지 타입별 몬스터 수 배율 — ★ 2배 적용 ──
+// ── 스테이지 타입별 몬스터 수 배율 — ★ 3배 적용 ──
 const MOB_COUNT_MULT = {
-  normal: 2.0,
-  elite: 2.4,
-  miniboss: 3.0,
-  boss: 2.6,
+  normal: 3.0,
+  elite: 3.6,
+  miniboss: 4.5,
+  boss: 3.9,
 };
 
-// ── 웨이브 수 — ★ 2배 적용 ──
+// ── 웨이브 수 — ★ 3배 적용 ──
 const WAVE_COUNTS = {
-  normal: 6,
-  elite: 6,
-  miniboss: 6,
-  boss: 8,
+  normal: 9,
+  elite: 9,
+  miniboss: 9,
+  boss: 12,
 };
 
 export default class StageDirector {
@@ -72,8 +72,8 @@ export default class StageDirector {
 
     // ── 몬스터 구성 ──
     const mobPool = _resolveMobPool(region, stageType);
-    const baseMobCount = 6 + Math.floor(stageNum / 2);  // ★ 2배 기본 몹 수
-    const mobCountPerWave = Math.min(20, Math.round(baseMobCount * (MOB_COUNT_MULT[stageType] || 1)));
+    const baseMobCount = 9 + Math.floor(stageNum * 3 / 4);  // ★ 3배 기본 몹 수
+    const mobCountPerWave = Math.min(30, Math.round(baseMobCount * (MOB_COUNT_MULT[stageType] || 1)));
     const waveCount = WAVE_COUNTS[stageType] || 3;
 
     // 몬스터 스탯 스케일링
