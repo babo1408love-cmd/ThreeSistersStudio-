@@ -137,10 +137,717 @@ export const THEMES = {
   },
 };
 
+// ── 색상 유틸 ──
+function _darken(hex, amount) {
+  const c = hex.replace('#', '');
+  const r = Math.max(0, parseInt(c.substr(0, 2), 16) - amount);
+  const g = Math.max(0, parseInt(c.substr(2, 2), 16) - amount);
+  const b = Math.max(0, parseInt(c.substr(4, 2), 16) - amount);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
 // ── 간단한 노이즈 ──
 function _noise(x, y, seed) {
   const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
   return n - Math.floor(n);
+}
+
+// ══════════════════════════════════════════════
+//  HD 오브젝트 Canvas 스프라이트 렌더링
+// ══════════════════════════════════════════════
+
+function _drawObject(ctx, obj, sx, sy) {
+  const e = obj.emoji;
+  const w = obj.w || 24;
+  const h = obj.h || 24;
+
+  switch (e) {
+    case '🌳': _drawTree(ctx, sx, sy, w, h, '#2d6b2d', '#1a4a1a', '#3a8a3a'); break;
+    case '🌲': _drawPineTree(ctx, sx, sy, w, h); break;
+    case '🌿': _drawGrass(ctx, sx, sy, w); break;
+    case '🍄': _drawMushroom(ctx, sx, sy, w); break;
+    case '🪨': _drawRock(ctx, sx, sy, w, h); break;
+    case '🌸': case '🌷': case '🌼': _drawFlower(ctx, sx, sy, w, e); break;
+    case '🍀': _drawClover(ctx, sx, sy, w); break;
+    case '🪷': _drawLotus(ctx, sx, sy, w); break;
+    case '💎': _drawCrystal(ctx, sx, sy, w, h, '#8B5CF6'); break;
+    case '🔮': _drawCrystal(ctx, sx, sy, w, h, '#C084FC'); break;
+    case '✨': _drawSparkle(ctx, sx, sy, w); break;
+    case '☁️': _drawCloud(ctx, sx, sy, w, h); break;
+    case '⭐': _drawStarObj(ctx, sx, sy, w); break;
+    case '🌙': _drawMoon(ctx, sx, sy, w); break;
+    case '🌈': _drawRainbow(ctx, sx, sy, w, h); break;
+    case '🌵': _drawCactus(ctx, sx, sy, w, h); break;
+    case '🌋': _drawVolcano(ctx, sx, sy, w, h); break;
+    case '🔥': _drawTorch(ctx, sx, sy, w, h); break;
+    case '💀': _drawSkull(ctx, sx, sy, w); break;
+    case '⛄': _drawSnowman(ctx, sx, sy, w, h); break;
+    case '❄️': _drawSnowflake(ctx, sx, sy, w); break;
+    case '🧊': _drawIceBlock(ctx, sx, sy, w); break;
+    case '🕸️': _drawWeb(ctx, sx, sy, w); break;
+    case '🦇': _drawBat(ctx, sx, sy, w); break;
+    case '🪸': _drawCoral(ctx, sx, sy, w); break;
+    case '🐚': _drawShell(ctx, sx, sy, w); break;
+    case '🌊': _drawWave(ctx, sx, sy, w); break;
+    case '🫧': _drawBubble(ctx, sx, sy, w); break;
+    case '🏛️': _drawPillar(ctx, sx, sy, w, h); break;
+    case '🏰': _drawCastle(ctx, sx, sy, w, h); break;
+    case '🏺': case '⚱️': _drawVase(ctx, sx, sy, w); break;
+    case '⚔️': _drawSwords(ctx, sx, sy, w); break;
+    case '⛓️': _drawChain(ctx, sx, sy, w, h); break;
+    case '🕊️': _drawBird(ctx, sx, sy, w); break;
+    default:
+      // 알 수 없는 이모지: 풀백
+      ctx.font = `${w}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(e, sx, sy);
+  }
+}
+
+// ── 나무 (활엽수) ──
+function _drawTree(ctx, x, y, w, h, leafColor, darkLeaf, lightLeaf) {
+  const trunkW = w * 0.18, trunkH = h * 0.45;
+  // 그림자
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + h * 0.4, w * 0.3, h * 0.06, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 줄기 (그라디언트)
+  const tg = ctx.createLinearGradient(x - trunkW, y, x + trunkW, y);
+  tg.addColorStop(0, '#5a3a1a');
+  tg.addColorStop(0.5, '#8B6914');
+  tg.addColorStop(1, '#4a2a0a');
+  ctx.fillStyle = tg;
+  ctx.fillRect(x - trunkW / 2, y, trunkW, trunkH);
+  // 잎사귀 (3개 원, 그라디언트)
+  const leafR = w * 0.35;
+  const leafY = y - h * 0.15;
+  const positions = [[0, -leafR * 0.3], [-leafR * 0.5, leafR * 0.15], [leafR * 0.5, leafR * 0.15]];
+  positions.forEach(([dx, dy]) => {
+    const lg = ctx.createRadialGradient(x + dx - 2, leafY + dy - 3, 0, x + dx, leafY + dy, leafR);
+    lg.addColorStop(0, lightLeaf);
+    lg.addColorStop(0.6, leafColor);
+    lg.addColorStop(1, darkLeaf);
+    ctx.fillStyle = lg;
+    ctx.beginPath();
+    ctx.arc(x + dx, leafY + dy, leafR, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  // 하이라이트
+  ctx.fillStyle = 'rgba(255,255,255,0.1)';
+  ctx.beginPath();
+  ctx.arc(x - leafR * 0.15, leafY - leafR * 0.5, leafR * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 소나무 ──
+function _drawPineTree(ctx, x, y, w, h) {
+  // 그림자
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + h * 0.42, w * 0.25, h * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // 줄기
+  ctx.fillStyle = '#6B4226';
+  ctx.fillRect(x - w * 0.08, y + h * 0.1, w * 0.16, h * 0.35);
+  // 삼각형 잎 3단
+  for (let i = 0; i < 3; i++) {
+    const ty = y - h * 0.1 + i * h * 0.18;
+    const tw = w * (0.4 - i * 0.06);
+    const th = h * 0.28;
+    const pg = ctx.createLinearGradient(x, ty - th, x, ty);
+    pg.addColorStop(0, '#1a5a1a');
+    pg.addColorStop(0.5, '#228B22');
+    pg.addColorStop(1, '#145014');
+    ctx.fillStyle = pg;
+    ctx.beginPath();
+    ctx.moveTo(x, ty - th);
+    ctx.lineTo(x + tw, ty);
+    ctx.lineTo(x - tw, ty);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ── 풀 ──
+function _drawGrass(ctx, x, y, w) {
+  const blades = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < blades; i++) {
+    const bx = x + (i - blades / 2) * w * 0.15;
+    const sway = Math.sin(Date.now() * 0.002 + i) * 2;
+    ctx.strokeStyle = i % 2 === 0 ? '#3CB371' : '#228B22';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx, y + w * 0.2);
+    ctx.quadraticCurveTo(bx + sway, y - w * 0.1, bx + sway * 0.5, y - w * 0.3);
+    ctx.stroke();
+  }
+}
+
+// ── 버섯 ──
+function _drawMushroom(ctx, x, y, w) {
+  // 줄기
+  ctx.fillStyle = '#F5F5DC';
+  ctx.fillRect(x - w * 0.1, y - w * 0.05, w * 0.2, w * 0.35);
+  // 갓 (그라디언트)
+  const mg = ctx.createRadialGradient(x - w * 0.05, y - w * 0.2, 0, x, y - w * 0.12, w * 0.28);
+  mg.addColorStop(0, '#FF6B6B');
+  mg.addColorStop(1, '#CC4444');
+  ctx.fillStyle = mg;
+  ctx.beginPath();
+  ctx.ellipse(x, y - w * 0.12, w * 0.28, w * 0.18, 0, Math.PI, 0);
+  ctx.fill();
+  // 점무늬
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.arc(x - w * 0.08, y - w * 0.2, w * 0.04, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.1, y - w * 0.18, w * 0.035, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 바위 ──
+function _drawRock(ctx, x, y, w, h) {
+  const rg = ctx.createRadialGradient(x - w * 0.1, y - h * 0.15, 0, x, y, w * 0.5);
+  rg.addColorStop(0, '#9B9B9B');
+  rg.addColorStop(0.6, '#6B6B6B');
+  rg.addColorStop(1, '#4A4A4A');
+  ctx.fillStyle = rg;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.4, y + h * 0.1);
+  ctx.quadraticCurveTo(x - w * 0.35, y - h * 0.3, x - w * 0.05, y - h * 0.35);
+  ctx.quadraticCurveTo(x + w * 0.2, y - h * 0.4, x + w * 0.38, y - h * 0.1);
+  ctx.quadraticCurveTo(x + w * 0.42, y + h * 0.15, x, y + h * 0.2);
+  ctx.quadraticCurveTo(x - w * 0.4, y + h * 0.2, x - w * 0.4, y + h * 0.1);
+  ctx.fill();
+  // 하이라이트
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(x - w * 0.1, y - h * 0.2, w * 0.12, h * 0.08, -0.3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 꽃 ──
+function _drawFlower(ctx, x, y, w, type) {
+  const colors = {
+    '🌸': ['#FFB6C1', '#FF69B4'],
+    '🌷': ['#FF6B6B', '#CC3333'],
+    '🌼': ['#FFD700', '#FFA500'],
+  };
+  const [light, dark] = colors[type] || colors['🌸'];
+  // 줄기
+  ctx.strokeStyle = '#228B22';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y + w * 0.3);
+  ctx.quadraticCurveTo(x + 2, y, x, y - w * 0.15);
+  ctx.stroke();
+  // 꽃잎
+  const petals = type === '🌷' ? 3 : 5;
+  for (let i = 0; i < petals; i++) {
+    const a = (i / petals) * Math.PI * 2 - Math.PI / 2;
+    const px = x + Math.cos(a) * w * 0.12;
+    const py = y - w * 0.15 + Math.sin(a) * w * 0.12;
+    const fg = ctx.createRadialGradient(px, py, 0, px, py, w * 0.1);
+    fg.addColorStop(0, light);
+    fg.addColorStop(1, dark);
+    ctx.fillStyle = fg;
+    ctx.beginPath();
+    ctx.arc(px, py, w * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 중심
+  ctx.fillStyle = '#FFEE88';
+  ctx.beginPath();
+  ctx.arc(x, y - w * 0.15, w * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 클로버 ──
+function _drawClover(ctx, x, y, w) {
+  ctx.fillStyle = '#228B22';
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 - Math.PI / 2;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * w * 0.12, y + Math.sin(a) * w * 0.12, w * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ── 연꽃 ──
+function _drawLotus(ctx, x, y, w) {
+  ctx.fillStyle = 'rgba(255,182,193,0.6)';
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.ellipse(x + Math.cos(a) * w * 0.15, y + Math.sin(a) * w * 0.08, w * 0.12, w * 0.06, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath();
+  ctx.arc(x, y, w * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 크리스탈 ──
+function _drawCrystal(ctx, x, y, w, h, color) {
+  const cg = ctx.createLinearGradient(x - w * 0.3, y - h * 0.4, x + w * 0.3, y + h * 0.3);
+  cg.addColorStop(0, color + 'CC');
+  cg.addColorStop(0.5, color);
+  cg.addColorStop(1, color + '88');
+  ctx.fillStyle = cg;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h * 0.45);
+  ctx.lineTo(x + w * 0.3, y - h * 0.1);
+  ctx.lineTo(x + w * 0.2, y + h * 0.3);
+  ctx.lineTo(x - w * 0.2, y + h * 0.3);
+  ctx.lineTo(x - w * 0.3, y - h * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  // 빛 반사
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - h * 0.45);
+  ctx.lineTo(x + w * 0.15, y - h * 0.1);
+  ctx.lineTo(x - w * 0.05, y - h * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  // 글로우
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 6;
+  ctx.strokeStyle = color + '44';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// ── 반짝임 ──
+function _drawSparkle(ctx, x, y, w) {
+  const t = Date.now() * 0.003;
+  const alpha = 0.3 + Math.sin(t + x + y) * 0.3;
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#FFD700';
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + t;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * w * 0.3, y + Math.sin(a) * w * 0.05);
+    ctx.lineTo(x + Math.cos(a + 0.1) * w * 0.05, y + Math.sin(a + 0.1) * w * 0.3);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── 구름 ──
+function _drawCloud(ctx, x, y, w, h) {
+  const cg = ctx.createRadialGradient(x, y, 0, x, y, w * 0.5);
+  cg.addColorStop(0, 'rgba(255,255,255,0.3)');
+  cg.addColorStop(1, 'rgba(255,255,255,0.05)');
+  ctx.fillStyle = cg;
+  ctx.beginPath();
+  ctx.arc(x, y, w * 0.3, 0, Math.PI * 2);
+  ctx.arc(x - w * 0.25, y + h * 0.08, w * 0.22, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.25, y + h * 0.08, w * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 별 (오브젝트) ──
+function _drawStarObj(ctx, x, y, w) {
+  const t = Date.now() * 0.002;
+  const alpha = 0.4 + Math.sin(t + x) * 0.3;
+  ctx.globalAlpha = alpha;
+  const sg = ctx.createRadialGradient(x, y, 0, x, y, w * 0.4);
+  sg.addColorStop(0, '#FFFFFF');
+  sg.addColorStop(0.5, '#FFD700');
+  sg.addColorStop(1, 'rgba(255,215,0,0)');
+  ctx.fillStyle = sg;
+  ctx.beginPath();
+  ctx.arc(x, y, w * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  // 십자 광채
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.3, y); ctx.lineTo(x + w * 0.3, y);
+  ctx.moveTo(x, y - w * 0.3); ctx.lineTo(x, y + w * 0.3);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+// ── 달 ──
+function _drawMoon(ctx, x, y, w) {
+  const mg = ctx.createRadialGradient(x - w * 0.1, y - w * 0.1, 0, x, y, w * 0.4);
+  mg.addColorStop(0, '#FFFFF0');
+  mg.addColorStop(0.7, '#FFD700');
+  mg.addColorStop(1, 'rgba(255,215,0,0.1)');
+  ctx.fillStyle = mg;
+  ctx.beginPath();
+  ctx.arc(x, y, w * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+  // 초승달 마스크
+  ctx.fillStyle = 'rgba(0,0,20,0.7)';
+  ctx.beginPath();
+  ctx.arc(x + w * 0.15, y - w * 0.05, w * 0.28, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 무지개 ──
+function _drawRainbow(ctx, x, y, w, h) {
+  const colors = ['#FF0000', '#FF8800', '#FFFF00', '#00FF00', '#0088FF', '#8800FF'];
+  colors.forEach((c, i) => {
+    ctx.strokeStyle = c + '44';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y + h * 0.3, w * 0.4 - i * 3, Math.PI, 0);
+    ctx.stroke();
+  });
+}
+
+// ── 선인장 ──
+function _drawCactus(ctx, x, y, w, h) {
+  const cg = ctx.createLinearGradient(x - w * 0.15, y, x + w * 0.15, y);
+  cg.addColorStop(0, '#1a6b1a');
+  cg.addColorStop(0.5, '#228B22');
+  cg.addColorStop(1, '#145014');
+  ctx.fillStyle = cg;
+  // 몸통
+  _roundRect(ctx, x - w * 0.12, y - h * 0.2, w * 0.24, h * 0.55, 5);
+  ctx.fill();
+  // 팔
+  ctx.fillRect(x + w * 0.12, y - h * 0.05, w * 0.15, w * 0.08);
+  _roundRect(ctx, x + w * 0.22, y - h * 0.2, w * 0.1, h * 0.2, 3);
+  ctx.fill();
+}
+
+// ── 화산 ──
+function _drawVolcano(ctx, x, y, w, h) {
+  const vg = ctx.createLinearGradient(x, y - h * 0.4, x, y + h * 0.3);
+  vg.addColorStop(0, '#4A2A0A');
+  vg.addColorStop(0.5, '#6B3A1A');
+  vg.addColorStop(1, '#3A1A0A');
+  ctx.fillStyle = vg;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.45, y + h * 0.3);
+  ctx.lineTo(x - w * 0.12, y - h * 0.35);
+  ctx.lineTo(x + w * 0.12, y - h * 0.35);
+  ctx.lineTo(x + w * 0.45, y + h * 0.3);
+  ctx.closePath();
+  ctx.fill();
+  // 용암
+  const lg = ctx.createRadialGradient(x, y - h * 0.3, 0, x, y - h * 0.3, w * 0.15);
+  lg.addColorStop(0, '#FFDD00');
+  lg.addColorStop(0.5, '#FF6600');
+  lg.addColorStop(1, '#FF4500');
+  ctx.fillStyle = lg;
+  ctx.beginPath();
+  ctx.ellipse(x, y - h * 0.3, w * 0.12, h * 0.06, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 횃불 ──
+function _drawTorch(ctx, x, y, w, h) {
+  // 막대
+  ctx.fillStyle = '#8B6914';
+  ctx.fillRect(x - w * 0.06, y - h * 0.1, w * 0.12, h * 0.5);
+  // 불꽃
+  const t = Date.now() * 0.005;
+  const fg = ctx.createRadialGradient(x, y - h * 0.2, 0, x, y - h * 0.15, w * 0.2);
+  fg.addColorStop(0, '#FFDD44');
+  fg.addColorStop(0.5, '#FF6600');
+  fg.addColorStop(1, 'rgba(255,68,0,0)');
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.arc(x + Math.sin(t) * 2, y - h * 0.2, w * 0.2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ── 해골 ──
+function _drawSkull(ctx, x, y, w) {
+  ctx.fillStyle = '#DDD';
+  ctx.beginPath();
+  ctx.arc(x, y - w * 0.05, w * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(x - w * 0.08, y - w * 0.08, w * 0.05, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.08, y - w * 0.08, w * 0.05, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(x - w * 0.04, y + w * 0.05, w * 0.03, w * 0.06);
+  ctx.fillRect(x + w * 0.01, y + w * 0.05, w * 0.03, w * 0.06);
+}
+
+// ── 눈사람 ──
+function _drawSnowman(ctx, x, y, w, h) {
+  const sg = ctx.createRadialGradient(x, y, 0, x, y, w * 0.3);
+  sg.addColorStop(0, '#FFFFFF');
+  sg.addColorStop(1, '#DDD');
+  ctx.fillStyle = sg;
+  ctx.beginPath();
+  ctx.arc(x, y + h * 0.1, w * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y - h * 0.1, w * 0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y - h * 0.28, w * 0.15, 0, Math.PI * 2);
+  ctx.fill();
+  // 눈
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(x - w * 0.05, y - h * 0.3, 2, 0, Math.PI * 2);
+  ctx.arc(x + w * 0.05, y - h * 0.3, 2, 0, Math.PI * 2);
+  ctx.fill();
+  // 코
+  ctx.fillStyle = '#FF6600';
+  ctx.beginPath();
+  ctx.moveTo(x, y - h * 0.27);
+  ctx.lineTo(x + w * 0.08, y - h * 0.25);
+  ctx.lineTo(x, y - h * 0.23);
+  ctx.fill();
+}
+
+// ── 눈결정 ──
+function _drawSnowflake(ctx, x, y, w) {
+  const t = Date.now() * 0.001;
+  ctx.strokeStyle = 'rgba(200,220,255,0.6)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + t * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * w * 0.3, y + Math.sin(a) * w * 0.3);
+    ctx.stroke();
+  }
+}
+
+// ── 얼음 블록 ──
+function _drawIceBlock(ctx, x, y, w) {
+  const ig = ctx.createLinearGradient(x - w * 0.3, y - w * 0.3, x + w * 0.3, y + w * 0.3);
+  ig.addColorStop(0, 'rgba(150,220,255,0.6)');
+  ig.addColorStop(0.5, 'rgba(100,200,240,0.4)');
+  ig.addColorStop(1, 'rgba(150,220,255,0.6)');
+  ctx.fillStyle = ig;
+  ctx.fillRect(x - w * 0.3, y - w * 0.3, w * 0.6, w * 0.6);
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fillRect(x - w * 0.2, y - w * 0.25, w * 0.15, w * 0.1);
+}
+
+// ── 거미줄 ──
+function _drawWeb(ctx, x, y, w) {
+  ctx.strokeStyle = 'rgba(200,200,200,0.25)';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * w * 0.4, y + Math.sin(a) * w * 0.4);
+    ctx.stroke();
+  }
+  for (let r = 1; r <= 3; r++) {
+    ctx.beginPath();
+    ctx.arc(x, y, w * 0.12 * r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// ── 박쥐 ──
+function _drawBat(ctx, x, y, w) {
+  const t = Date.now() * 0.008;
+  const wingAngle = Math.sin(t + x) * 0.3;
+  ctx.fillStyle = '#333';
+  // 몸
+  ctx.beginPath();
+  ctx.arc(x, y, w * 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  // 날개
+  [-1, 1].forEach(dx => {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + dx * w * 0.25, y - w * 0.15 + wingAngle * 10, x + dx * w * 0.4, y + w * 0.05);
+    ctx.quadraticCurveTo(x + dx * w * 0.2, y + w * 0.08, x, y);
+    ctx.fill();
+  });
+}
+
+// ── 산호 ──
+function _drawCoral(ctx, x, y, w) {
+  const cg = ctx.createRadialGradient(x, y, 0, x, y, w * 0.4);
+  cg.addColorStop(0, '#FF6B6B');
+  cg.addColorStop(1, '#CC3333');
+  ctx.fillStyle = cg;
+  for (let i = 0; i < 4; i++) {
+    const bx = x + (Math.random() - 0.5) * w * 0.3;
+    const by = y + (Math.random() - 0.5) * w * 0.2;
+    ctx.beginPath();
+    ctx.arc(bx, by, w * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ── 조개 ──
+function _drawShell(ctx, x, y, w) {
+  const sg = ctx.createRadialGradient(x, y, 0, x, y, w * 0.3);
+  sg.addColorStop(0, '#FFE4C4');
+  sg.addColorStop(1, '#DEB887');
+  ctx.fillStyle = sg;
+  ctx.beginPath();
+  ctx.ellipse(x, y, w * 0.25, w * 0.18, 0, 0, Math.PI);
+  ctx.fill();
+  // 줄무늬
+  ctx.strokeStyle = 'rgba(139,90,43,0.3)';
+  ctx.lineWidth = 0.8;
+  for (let i = 0; i < 4; i++) {
+    ctx.beginPath();
+    ctx.arc(x, y + w * 0.02, w * 0.08 + i * w * 0.05, Math.PI * 1.1, Math.PI * 1.9);
+    ctx.stroke();
+  }
+}
+
+// ── 파도 ──
+function _drawWave(ctx, x, y, w) {
+  const t = Date.now() * 0.003;
+  ctx.strokeStyle = 'rgba(30,144,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < w * 0.8; i++) {
+    const wx = x - w * 0.4 + i;
+    const wy = y + Math.sin(i * 0.2 + t) * 4;
+    i === 0 ? ctx.moveTo(wx, wy) : ctx.lineTo(wx, wy);
+  }
+  ctx.stroke();
+}
+
+// ── 거품 ──
+function _drawBubble(ctx, x, y, w) {
+  const t = Date.now() * 0.002;
+  const alpha = 0.2 + Math.sin(t + y) * 0.1;
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = 'rgba(100,200,255,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(x, y, w * 0.25, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.beginPath();
+  ctx.arc(x - w * 0.06, y - w * 0.08, w * 0.06, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// ── 기둥 ──
+function _drawPillar(ctx, x, y, w, h) {
+  const pg = ctx.createLinearGradient(x - w * 0.2, y, x + w * 0.2, y);
+  pg.addColorStop(0, '#8B8B7A');
+  pg.addColorStop(0.3, '#C8C8B0');
+  pg.addColorStop(0.7, '#C8C8B0');
+  pg.addColorStop(1, '#8B8B7A');
+  ctx.fillStyle = pg;
+  ctx.fillRect(x - w * 0.15, y - h * 0.4, w * 0.3, h * 0.8);
+  // 주두
+  ctx.fillRect(x - w * 0.22, y - h * 0.42, w * 0.44, h * 0.06);
+  ctx.fillRect(x - w * 0.22, y + h * 0.36, w * 0.44, h * 0.06);
+}
+
+// ── 성 ──
+function _drawCastle(ctx, x, y, w, h) {
+  const cg = ctx.createLinearGradient(x - w * 0.4, y, x + w * 0.4, y);
+  cg.addColorStop(0, '#4A4A4A');
+  cg.addColorStop(0.5, '#6B6B6B');
+  cg.addColorStop(1, '#3A3A3A');
+  ctx.fillStyle = cg;
+  // 본체
+  ctx.fillRect(x - w * 0.3, y - h * 0.15, w * 0.6, h * 0.45);
+  // 탑 2개
+  [-1, 1].forEach(dx => {
+    ctx.fillRect(x + dx * w * 0.28, y - h * 0.4, w * 0.14, h * 0.7);
+    // 성벽 톱니
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(x + dx * w * 0.28 - w * 0.01 + i * w * 0.05, y - h * 0.45, w * 0.04, h * 0.06);
+    }
+  });
+  // 문
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(x, y + h * 0.15, w * 0.08, Math.PI, 0);
+  ctx.fillRect(x - w * 0.08, y + h * 0.15, w * 0.16, h * 0.15);
+  ctx.fill();
+}
+
+// ── 꽃병 ──
+function _drawVase(ctx, x, y, w) {
+  const vg = ctx.createLinearGradient(x - w * 0.2, y, x + w * 0.2, y);
+  vg.addColorStop(0, '#8B6914');
+  vg.addColorStop(0.5, '#B8860B');
+  vg.addColorStop(1, '#6B4F0A');
+  ctx.fillStyle = vg;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.1, y - w * 0.25);
+  ctx.quadraticCurveTo(x - w * 0.22, y, x - w * 0.15, y + w * 0.2);
+  ctx.lineTo(x + w * 0.15, y + w * 0.2);
+  ctx.quadraticCurveTo(x + w * 0.22, y, x + w * 0.1, y - w * 0.25);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ── 쌍검 ──
+function _drawSwords(ctx, x, y, w) {
+  ctx.strokeStyle = '#AAA';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  [-1, 1].forEach(dx => {
+    ctx.beginPath();
+    ctx.moveTo(x + dx * w * 0.05, y + w * 0.2);
+    ctx.lineTo(x + dx * w * 0.2, y - w * 0.25);
+    ctx.stroke();
+    // 가드
+    ctx.strokeStyle = '#8B6914';
+    ctx.beginPath();
+    ctx.moveTo(x + dx * w * 0.02, y + w * 0.12);
+    ctx.lineTo(x + dx * w * 0.15, y + w * 0.12);
+    ctx.stroke();
+    ctx.strokeStyle = '#AAA';
+  });
+}
+
+// ── 쇠사슬 ──
+function _drawChain(ctx, x, y, w, h) {
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 4; i++) {
+    const cy2 = y - h * 0.3 + i * h * 0.18;
+    ctx.beginPath();
+    ctx.ellipse(x, cy2, w * 0.08, h * 0.06, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// ── 새 ──
+function _drawBird(ctx, x, y, w) {
+  const t = Date.now() * 0.005;
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x - w * 0.1, y, w * 0.15, Math.PI + 0.3, Math.PI * 2 - 0.3 + Math.sin(t) * 0.2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x + w * 0.1, y, w * 0.15, Math.PI + 0.3, Math.PI * 2 - 0.3 + Math.sin(t + 1) * 0.2);
+  ctx.stroke();
+}
+
+// ── 둥근 사각형 헬퍼 ──
+function _roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 // ── 맵 생성 ──
@@ -254,11 +961,14 @@ export function renderMap(ctx, map, camera) {
   const vw = ctx.canvas.width;
   const vh = ctx.canvas.height;
 
-  // Background
-  ctx.fillStyle = theme.bgColor;
+  // Background (그라디언트)
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, vh);
+  bgGrad.addColorStop(0, theme.bgColor);
+  bgGrad.addColorStop(1, _darken(theme.bgColor, 20));
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, vw, vh);
 
-  // Floor tiles (only visible ones)
+  // Floor tiles (그라디언트+노이즈 텍스처)
   const startCol = Math.max(0, Math.floor(cx / tileSize));
   const endCol = Math.min(map.width, Math.ceil((cx + vw) / tileSize));
   const startRow = Math.max(0, Math.floor(cy / tileSize));
@@ -267,12 +977,27 @@ export function renderMap(ctx, map, camera) {
   for (let r = startRow; r < endRow; r++) {
     for (let c = startCol; c < endCol; c++) {
       const tile = floor[r][c];
+      const tx = c * tileSize - cx;
+      const ty = r * tileSize - cy;
+      // 기본 색상
       ctx.fillStyle = tile.color;
-      ctx.fillRect(c * tileSize - cx, r * tileSize - cy, tileSize + 1, tileSize + 1);
-      // Subtle grass texture
-      if (tile.variant > 0.7) {
-        ctx.fillStyle = 'rgba(255,255,255,0.03)';
-        ctx.fillRect(c * tileSize - cx + 5, r * tileSize - cy + 5, tileSize - 10, tileSize - 10);
+      ctx.fillRect(tx, ty, tileSize + 1, tileSize + 1);
+      // 노이즈 텍스처 오버레이 (타일 변이에 따라)
+      if (tile.variant > 0.6) {
+        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillRect(tx + 3, ty + 3, tileSize - 6, tileSize - 6);
+      }
+      if (tile.variant > 0.85) {
+        // 밝은 점 (풀잎/먼지)
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.beginPath();
+        ctx.arc(tx + tile.variant * 30, ty + tile.variant * 25, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (tile.variant < 0.15) {
+        // 어두운 점 (그림자)
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        ctx.fillRect(tx + 8, ty + 8, tileSize - 16, tileSize - 16);
       }
     }
   }
@@ -306,15 +1031,12 @@ export function renderMap(ctx, map, camera) {
     }
   }
 
-  // Objects
-  ctx.font = '24px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  // Objects (HD Canvas 스프라이트)
   for (const obj of objects) {
     const sx = obj.x - cx;
     const sy = obj.y - cy;
-    if (sx > -50 && sx < vw + 50 && sy > -50 && sy < vh + 50) {
-      ctx.fillText(obj.emoji, sx, sy);
+    if (sx > -60 && sx < vw + 60 && sy > -60 && sy < vh + 60) {
+      _drawObject(ctx, obj, sx, sy);
     }
   }
 
@@ -597,11 +1319,14 @@ export function renderSurvivorMap(ctx, map, camera) {
   const vw = ctx.canvas.width;
   const vh = ctx.canvas.height;
 
-  // ── 배경 ──
-  ctx.fillStyle = theme.bgColor;
+  // ── 배경 (그라디언트) ──
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, vh);
+  bgGrad.addColorStop(0, theme.bgColor);
+  bgGrad.addColorStop(1, _darken(theme.bgColor, 15));
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, vw, vh);
 
-  // ── 바닥 타일 (보이는 영역만) ──
+  // ── 바닥 타일 (그라디언트+노이즈 텍스처) ──
   const startCol = Math.max(0, Math.floor(cx / tileSize));
   const endCol = Math.min(map.width, Math.ceil((cx + vw) / tileSize));
   const startRow = Math.max(0, Math.floor(cy / tileSize));
@@ -610,14 +1335,26 @@ export function renderSurvivorMap(ctx, map, camera) {
   for (let r = startRow; r < endRow; r++) {
     for (let c = startCol; c < endCol; c++) {
       const tile = floor[r][c];
+      const tx = c * tileSize - cx;
+      const ty = r * tileSize - cy;
       ctx.fillStyle = tile.color;
-      ctx.fillRect(c * tileSize - cx, r * tileSize - cy, tileSize + 1, tileSize + 1);
-      // 미세한 텍스처
-      if (tile.variant > 0.7) {
+      ctx.fillRect(tx, ty, tileSize + 1, tileSize + 1);
+      // 텍스처 오버레이
+      if (tile.variant > 0.6) {
         ctx.fillStyle = tile.arena
-          ? 'rgba(255,215,0,0.04)'   // 아레나: 살짝 금빛
-          : 'rgba(255,255,255,0.03)'; // 필드: 살짝 밝음
-        ctx.fillRect(c * tileSize - cx + 5, r * tileSize - cy + 5, tileSize - 10, tileSize - 10);
+          ? 'rgba(255,215,0,0.05)'
+          : 'rgba(255,255,255,0.04)';
+        ctx.fillRect(tx + 3, ty + 3, tileSize - 6, tileSize - 6);
+      }
+      if (tile.variant > 0.85) {
+        ctx.fillStyle = tile.arena ? 'rgba(255,200,0,0.08)' : 'rgba(255,255,255,0.06)';
+        ctx.beginPath();
+        ctx.arc(tx + tile.variant * 30, ty + tile.variant * 25, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (tile.variant < 0.15) {
+        ctx.fillStyle = 'rgba(0,0,0,0.05)';
+        ctx.fillRect(tx + 8, ty + 8, tileSize - 16, tileSize - 16);
       }
     }
   }
@@ -695,15 +1432,13 @@ export function renderSurvivorMap(ctx, map, camera) {
   const startBucket = Math.max(0, Math.floor((cx - 60) / bucketTilePx));
   const endBucket = Math.min(objectBuckets.length, Math.ceil((cx + vw + 60) / bucketTilePx));
 
-  ctx.font = '24px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  // Objects (HD Canvas 스프라이트 — 버킷 기반 최적화)
   for (let b = startBucket; b < endBucket; b++) {
     for (const obj of objectBuckets[b]) {
       const sx = obj.x - cx;
       const sy = obj.y - cy;
-      if (sx > -50 && sx < vw + 50 && sy > -50 && sy < vh + 50) {
-        ctx.fillText(obj.emoji, sx, sy);
+      if (sx > -60 && sx < vw + 60 && sy > -60 && sy < vh + 60) {
+        _drawObject(ctx, obj, sx, sy);
       }
     }
   }

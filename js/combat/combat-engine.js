@@ -17,6 +17,7 @@ import AutoWalk from '../systems/auto-walk.js';
 import RageSystem from '../systems/rage-system.js';
 import { ENEMY_SPEED_CONFIG, calcEnemySpeed } from '../data/combat-config.js';
 import HeroEngine from '../systems/hero-engine.js';
+import StageDirector from '../systems/stage-director.js';
 
 // ── 업그레이드 아이템 정의 ──
 const UPGRADE_ITEMS = [
@@ -43,14 +44,16 @@ export default class CombatEngine {
     this.onVictory = options.onVictory || (() => {});
     this.onDeath = options.onDeath || (() => {});
 
-    // Map — 3분 자동전진에 맞춘 서바이벌 맵 (바닥+사물+배틀아레나)
-    const scrollBaseSpeed = 0.6 + this.stageLevel * 0.05;
-    const scrollAccel = 0.00008;
+    // StageDirector 생성 계획 (외부 전달 또는 자동 생성)
+    this._plan = options.plan || StageDirector.prepare(this.stageLevel);
+
+    // Map — StageDirector plan에서 맵 파라미터 추출
+    const mapParams = this._plan.map;
     this.map = generateSurvivorMap({
-      themeId: options.mapTheme || 'fairy_garden',
-      stageLevel: this.stageLevel,
-      scrollSpeed: scrollBaseSpeed,
-      scrollAccel,
+      themeId: mapParams.themeId,
+      stageLevel: mapParams.stageLevel,
+      scrollSpeed: mapParams.scrollSpeed,
+      scrollAccel: mapParams.scrollAccel,
     });
     this.camera = { x: 0, y: 0 };
 
@@ -135,13 +138,13 @@ export default class CombatEngine {
 
     // 🌫️ 자동 전진 (뱀서류 강제 전진 — 포자 안개가 뒤에서 밀려옴)
     this.autoScroll = new AutoScroll({
-      speed: 0.6 + this.stageLevel * 0.05, // 스테이지 레벨에 따라 속도 증가
+      speed: mapParams.scrollSpeed,
       direction: 'horizontal',
       startBoundary: 0,
       warningZone: 120,
       damagePerSec: 20 + this.stageLevel * 2,
       pushForce: 2.0,
-      accel: 0.00008,
+      accel: mapParams.scrollAccel,
     });
 
     // 화면 흔들림 상태
@@ -352,9 +355,14 @@ export default class CombatEngine {
   _spawnWave() {
     this.waveSpawned = true;
     this.waveTimer = 0;
-    // BalanceAI: 플레이어 전투력 전달 → 자동 밸런싱
-    const playerPower = (this.player.attack * this.player.speed * 0.8) + (this.player.maxHp * 0.3) + (this.player.defense * 0.5);
-    const wave = generateWave(this.currentWave, this.stageLevel, playerPower);
+    // StageDirector plan → buildWaveFromPlan 우선, 폴백: generateWave
+    let wave;
+    if (this._plan) {
+      wave = StageDirector.buildWaveFromPlan(this._plan, this.currentWave);
+    } else {
+      const playerPower = (this.player.attack * this.player.speed * 0.8) + (this.player.maxHp * 0.3) + (this.player.defense * 0.5);
+      wave = generateWave(this.currentWave, this.stageLevel, playerPower);
+    }
 
     // 일반몹: 플레이어 뒤쪽(왼쪽) + 상하에서 등장
     wave.enemies.forEach((eDef, i) => {
@@ -1303,62 +1311,188 @@ export default class CombatEngine {
     const sy = e.y - cy - e.bounceY;
     const r = e.radius;
 
+    // 바운스 스퀴시 변형 (착지 시 넓고 납작하게)
+    const bouncePhase = Math.abs(Math.sin(e.bobPhase));
+    const squishX = 1 + bouncePhase * 0.12;  // 가로 확장
+    const squishY = 1 - bouncePhase * 0.08;  // 세로 압축
+
     ctx.save();
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
-    ctx.beginPath();
-    ctx.ellipse(sx, e.y - cy + r * 0.3, r * 0.7, r * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
 
-    // Body (round slime)
-    ctx.fillStyle = e.color;
-    ctx.strokeStyle = e.color;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.beginPath();
-    ctx.arc(sx - r * 0.25, sy - r * 0.3, r * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Eyes
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(sx - r * 0.25, sy - r * 0.15, r * 0.2, 0, Math.PI * 2);
-    ctx.arc(sx + r * 0.25, sy - r * 0.15, r * 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#111';
-    ctx.beginPath();
-    ctx.arc(sx - r * 0.2, sy - r * 0.1, r * 0.1, 0, Math.PI * 2);
-    ctx.arc(sx + r * 0.3, sy - r * 0.1, r * 0.1, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Mouth
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(sx, sy + r * 0.15, r * 0.15, 0, Math.PI);
-    ctx.stroke();
-
-    // Boss crown
-    if (e.isBoss) {
-      ctx.font = `${Math.round(r)}px serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText('👑', sx, sy - r - 5);
+    // 레어도 글로우 (희귀 이상)
+    const rarityGlow = {
+      'rare': { color: '#3b82f6', blur: 6 },
+      'magic': { color: '#a855f7', blur: 8 },
+      'epic': { color: '#f59e0b', blur: 12 },
+      'legendary': { color: '#ef4444', blur: 16 },
+    };
+    const glow = rarityGlow[e.rarity];
+    if (glow) {
+      ctx.shadowColor = glow.color;
+      ctx.shadowBlur = glow.blur;
     }
 
-    // HP bar
+    // 그림자 (스퀴시에 반응)
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(sx, e.y - cy + r * 0.35, r * 0.75 * squishX, r * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // 몸체 (방사형 그라디언트 — 젤리 느낌)
+    const bodyGrad = ctx.createRadialGradient(
+      sx - r * 0.15 * squishX, sy - r * 0.2 * squishY, r * 0.1,
+      sx, sy, r * Math.max(squishX, squishY)
+    );
+    bodyGrad.addColorStop(0, _lightenColor(e.color, 40));
+    bodyGrad.addColorStop(0.5, e.color);
+    bodyGrad.addColorStop(1, _darkenColor(e.color, 30));
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, r * squishX, r * squishY, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 젤리 투명 오버레이
+    const gelGrad = ctx.createRadialGradient(sx, sy, r * 0.3, sx, sy, r * squishX);
+    gelGrad.addColorStop(0, 'rgba(255,255,255,0)');
+    gelGrad.addColorStop(1, 'rgba(255,255,255,0.08)');
+    ctx.fillStyle = gelGrad;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, r * squishX, r * squishY, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 스펙큘러 하이라이트 (큰 빛)
+    const hlGrad = ctx.createRadialGradient(
+      sx - r * 0.2, sy - r * 0.25 * squishY, 0,
+      sx - r * 0.2, sy - r * 0.25 * squishY, r * 0.35
+    );
+    hlGrad.addColorStop(0, 'rgba(255,255,255,0.45)');
+    hlGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hlGrad;
+    ctx.beginPath();
+    ctx.ellipse(sx - r * 0.2, sy - r * 0.22 * squishY, r * 0.3, r * 0.2 * squishY, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 작은 스펙큘러 (보조 반짝임)
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(sx + r * 0.15, sy - r * 0.35 * squishY, r * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 눈 (흰자 + 홍채 + 동공 + 반짝임)
+    const eyeLx = sx - r * 0.22, eyeRx = sx + r * 0.22;
+    const eyeY = sy - r * 0.12 * squishY;
+    const eyeR = r * 0.18;
+
+    // 흰자
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(eyeLx, eyeY, eyeR, eyeR * 1.1 * squishY, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(eyeRx, eyeY, eyeR, eyeR * 1.1 * squishY, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 동공 (플레이어 방향 추적)
+    const dx = this.player.x - e.x;
+    const dy = this.player.y - e.y;
+    const lookDist = Math.min(r * 0.06, Math.sqrt(dx * dx + dy * dy) * 0.01);
+    const lookAngle = Math.atan2(dy, dx);
+    const pupilOx = Math.cos(lookAngle) * lookDist;
+    const pupilOy = Math.sin(lookAngle) * lookDist;
+
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath();
+    ctx.arc(eyeLx + pupilOx, eyeY + pupilOy, eyeR * 0.55, 0, Math.PI * 2);
+    ctx.arc(eyeRx + pupilOx, eyeY + pupilOy, eyeR * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 눈 반짝임
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(eyeLx - eyeR * 0.2, eyeY - eyeR * 0.25, eyeR * 0.2, 0, Math.PI * 2);
+    ctx.arc(eyeRx - eyeR * 0.2, eyeY - eyeR * 0.25, eyeR * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 입 (미소)
+    ctx.strokeStyle = 'rgba(40,20,20,0.4)';
+    ctx.lineWidth = r * 0.06;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(sx, sy + r * 0.15 * squishY, r * 0.14, 0.1, Math.PI - 0.1);
+    ctx.stroke();
+
+    // 타입별 특수 이펙트
+    if (e.color === '#FF4500' || e.id === 'fire_slime') {
+      // 불 슬라임: 작은 불꽃 파티클
+      const t = Date.now() * 0.005;
+      for (let i = 0; i < 3; i++) {
+        const fa = t + i * 2.1;
+        const fx = sx + Math.sin(fa) * r * 0.5;
+        const fy = sy - r * 0.8 - Math.abs(Math.sin(fa * 0.7)) * r * 0.3;
+        ctx.fillStyle = `rgba(255,${100 + Math.sin(fa) * 50},0,${0.3 + Math.sin(fa) * 0.2})`;
+        ctx.beginPath();
+        ctx.arc(fx, fy, r * 0.08, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (e.color === '#00CED1' || e.id === 'ice_slime') {
+      // 얼음 슬라임: 서리 결정
+      ctx.strokeStyle = 'rgba(200,240,255,0.3)';
+      ctx.lineWidth = 0.8;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(sx + Math.cos(a) * r * 0.6, sy + Math.sin(a) * r * 0.6 * squishY);
+        ctx.lineTo(sx + Math.cos(a) * r * 0.9, sy + Math.sin(a) * r * 0.9 * squishY);
+        ctx.stroke();
+      }
+    }
+
+    // 보스 왕관 (Canvas 그리기)
+    if (e.isBoss) {
+      const crownY = sy - r * squishY - r * 0.3;
+      const crownW = r * 0.6;
+      const cg = ctx.createLinearGradient(sx - crownW, crownY, sx + crownW, crownY);
+      cg.addColorStop(0, '#DAA520');
+      cg.addColorStop(0.5, '#FFD700');
+      cg.addColorStop(1, '#DAA520');
+      ctx.fillStyle = cg;
+      ctx.beginPath();
+      ctx.moveTo(sx - crownW, crownY + r * 0.15);
+      ctx.lineTo(sx - crownW * 0.7, crownY - r * 0.1);
+      ctx.lineTo(sx - crownW * 0.3, crownY + r * 0.05);
+      ctx.lineTo(sx, crownY - r * 0.18);
+      ctx.lineTo(sx + crownW * 0.3, crownY + r * 0.05);
+      ctx.lineTo(sx + crownW * 0.7, crownY - r * 0.1);
+      ctx.lineTo(sx + crownW, crownY + r * 0.15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#B8860B';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      // 왕관 보석
+      ctx.fillStyle = '#FF4444';
+      ctx.beginPath();
+      ctx.arc(sx, crownY - r * 0.05, r * 0.06, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // HP 바 (그라디언트)
     if (e.hp < e.maxHp) {
-      const barW = r * 2;
-      const barH = 3;
-      const hpRatio = e.hp / e.maxHp;
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(sx - barW / 2, sy - r - 8, barW, barH);
-      ctx.fillStyle = hpRatio > 0.5 ? '#86efac' : hpRatio > 0.25 ? '#fbbf24' : '#ff6b6b';
-      ctx.fillRect(sx - barW / 2, sy - r - 8, barW * hpRatio, barH);
+      const barW = r * 2.2;
+      const barH = 4;
+      const barY = sy - r * squishY - (e.isBoss ? r * 0.55 : 10);
+      const hpRatio = Math.max(0, e.hp / e.maxHp);
+      // 배경
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      this._fillRoundRect(ctx, sx - barW / 2, barY, barW, barH, 2);
+      // HP 색상
+      const hpColor = hpRatio > 0.5 ? '#86efac' : hpRatio > 0.25 ? '#fbbf24' : '#ff6b6b';
+      const hpGrad = ctx.createLinearGradient(sx - barW / 2, barY, sx - barW / 2, barY + barH);
+      hpGrad.addColorStop(0, _lightenColor(hpColor, 30));
+      hpGrad.addColorStop(1, hpColor);
+      ctx.fillStyle = hpGrad;
+      this._fillRoundRect(ctx, sx - barW / 2, barY, barW * hpRatio, barH, 2);
     }
 
     ctx.restore();
@@ -1580,6 +1714,23 @@ export default class CombatEngine {
     window.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('mouseup', this._onMouseUp);
   }
+}
+
+// ── 색상 유틸리티 ──
+function _lightenColor(hex, amount) {
+  const c = hex.replace('#', '');
+  const r = Math.min(255, parseInt(c.substring(0, 2), 16) + amount);
+  const g = Math.min(255, parseInt(c.substring(2, 4), 16) + amount);
+  const b = Math.min(255, parseInt(c.substring(4, 6), 16) + amount);
+  return `rgb(${r},${g},${b})`;
+}
+
+function _darkenColor(hex, amount) {
+  const c = hex.replace('#', '');
+  const r = Math.max(0, parseInt(c.substring(0, 2), 16) - amount);
+  const g = Math.max(0, parseInt(c.substring(2, 4), 16) - amount);
+  const b = Math.max(0, parseInt(c.substring(4, 6), 16) - amount);
+  return `rgb(${r},${g},${b})`;
 }
 
 // Attr glow colors for spirit ring

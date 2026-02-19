@@ -8,6 +8,7 @@ import SaveManager from '../core/save-manager.js';
 import EventBus from '../core/event-bus.js';
 import { getStage, getMaxStage } from '../data/stages.js';
 import CombatEngine from '../combat/combat-engine.js';
+import StageDirector from '../systems/stage-director.js';
 import { showConfetti } from '../ui/toast.js';
 
 export default class Stage2Scene {
@@ -69,13 +70,15 @@ export default class Stage2Scene {
       try { HeroAI.calculateAll(); } catch(e) { console.warn('[HeroAI] calculateAll 실패:', e); }
     }
 
-    // Determine wave count from stage
-    const waveCount = this._stage.combat?.waves?.length || 4;
+    // StageDirector로 스테이지 생성 계획 수립
+    const plan = StageDirector.prepare(GameState.currentStage);
+    const waveCount = plan.enemies.waveCount || this._stage.combat?.waves?.length || 4;
 
     this._engine = new CombatEngine(canvas, {
       stageLevel: GameState.currentStage,
       maxWaves: waveCount,
-      mapTheme: this._stage.mapTheme || 'fairy_garden',
+      mapTheme: plan.map.themeId,
+      plan,  // StageDirector 생성 계획 전달
       onVictory: (result) => this._onVictory(result),
       onDeath: () => this._onDeath(),
     });
@@ -98,7 +101,7 @@ export default class Stage2Scene {
 
   _onVictory(result) {
     showConfetti();
-    const rewards = this._stage.rewards;
+    const rewards = this._engine._plan?.rewards || this._stage.rewards;
     GameState.addGold(rewards.gold);
     GameState.stats.stagesCleared++;
 
