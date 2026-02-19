@@ -22,7 +22,7 @@ import { getWavePhase, applySpawnMult, DROP_CHANCE_PER_MOB, BOSS_DROP_GUARANTEED
 // ── 업그레이드 아이템 정의 ──
 const UPGRADE_ITEMS = [
   {id:'fast_attack',  name:'빠른공격',  emoji:'🔴',color:'#FF4444',desc:'공격속도+20%',  apply:(p)=>{p.atkSpeed*=0.8;}},
-  {id:'strong_attack', name:'강한공격',  emoji:'🟠',color:'#FF8800',desc:'공격크기1.5배',  apply:(p)=>{p.projSize*=1.5;}},
+  {id:'strong_attack', name:'강한공격',  emoji:'🟠',color:'#FF8800',desc:'공격크기1.5배',  apply:(p)=>{p.projSize=Math.min(p.projSize*1.5, p.radius * 5);}},
   {id:'long_range',    name:'먼공격',    emoji:'🟡',color:'#FFDD00',desc:'사거리+30%',    apply:(p)=>{p.projSpeed*=1.3;}},
   {id:'double_shot',   name:'연속발사',  emoji:'🟢',color:'#44BB44',desc:'2발씩 발사',    apply:(p)=>{p.shotCount=Math.min(p.shotCount+1,4);}},
   {id:'pierce',        name:'관통공격',  emoji:'🔵',color:'#4488FF',desc:'2마리 관통',    apply:(p)=>{p.pierce=Math.min(p.pierce+1,4);}},
@@ -349,9 +349,6 @@ export default class CombatEngine {
     const phase = getWavePhase(this._elapsed / 1000);
     const enemies = applySpawnMult(wave.enemies, phase.spawnMult);
 
-    // 엘리트 지정: 웨이브당 랜덤 1마리
-    const eliteIdx = Math.floor(Math.random() * enemies.length);
-
     // 일반몹: 화면 바깥 원형 배치 (균등 간격)
     const spawnDist = this.W * 0.5 + 60;
     enemies.forEach((eDef, i) => {
@@ -363,8 +360,8 @@ export default class CombatEngine {
       sy = Math.max(20, Math.min(this.map.mapH - 20, sy));
       const entity = this._createEnemy(eDef, sx, sy);
 
-      // 엘리트: HP 3배 + 크기 1.5배 + 빨간 테두리
-      if (i === eliteIdx) {
+      // 엘리트: 5% 확률로 출현 (HP 3배 + 크기 1.5배 + 빨간 테두리)
+      if (Math.random() < 0.05) {
         entity.hp *= 3;
         entity.maxHp *= 3;
         entity.scale = (entity.scale || 1) * 1.5;
@@ -762,6 +759,7 @@ export default class CombatEngine {
 
         for (let i = this.enemies.length - 1; i >= 0; i--) {
           const e = this.enemies[i];
+          if (!e || !e.alive === false) continue;
           if (this._circleHit(p, e)) {
             // HeroBattleAI 원소 상성 적용
             let elementMult = 1.0;
@@ -800,7 +798,7 @@ export default class CombatEngine {
       }
       // Enemy projectiles → player
       if (p.source === 'enemy') {
-        if (this._circleHit(p, this.player)) {
+        if (this.player && this._circleHit(p, this.player)) {
           this._damagePlayer(p.damage);
           return false;
         }
@@ -1683,6 +1681,7 @@ export default class CombatEngine {
   }
 
   _circleHit(a, b) {
+    if (!a || !b || a.x == null || b.x == null) return false;
     const dx = a.x - b.x;
     const dy = a.y - b.y;
     const rr = (a.radius || 5) + (b.radius || 5);

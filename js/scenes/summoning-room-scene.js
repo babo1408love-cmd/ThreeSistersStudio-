@@ -435,17 +435,38 @@ export default class SummoningRoomScene {
       return;
     }
 
-    // 연쇄 소환 연출
-    for (let i = 0; i < summoned.length; i++) {
-      this._showSummonReveal(summoned[i]);
-      if (i < summoned.length - 1) {
-        await new Promise(r => setTimeout(r, 800));
-      }
-    }
+    // 연속 소환 결과 — 이름 리스트로 한번에 표시 + 자동 흡수
+    showConfetti();
+    const listHtml = summoned.map(s => {
+      const attrInfo = ATTR_INFO[s.attribute] || { name:'빛', emoji:'✨', color:'#FFD700' };
+      const rarityId = s.rarityId || 1;
+      const ri = getRarityInfo(rarityId);
+      const badgeClass = ({common:'green',rare:'purple',magic:'cyan',epic:'gold',legendary:'red'})[s.rarity] || 'green';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.1);">
+        <span style="font-size:1.2em;">${attrInfo.emoji}</span>
+        <span style="flex:1;font-weight:600;">${s.name}</span>
+        <span class="badge badge-${badgeClass}" style="font-size:0.8em;">${ri.emoji}${ri.stars}</span>
+      </div>`;
+    }).join('');
 
-    showToast(`🌟 ${summoned.length}마리 연속 소환 완료!`);
-    // 화면 갱신
-    setTimeout(() => this.render(), 1500);
+    const overlay = document.createElement('div');
+    overlay.className = 'summon-reveal';
+    overlay.innerHTML = `
+      <div style="font-size:1.3em;font-weight:700;margin-bottom:12px;">🌟 ${summoned.length}마리 소환 완료!</div>
+      <div style="max-height:300px;overflow-y:auto;width:100%;padding:0 8px;">${listHtml}</div>
+      <div style="margin-top:12px;padding:8px 12px;background:rgba(100,255,150,0.15);border:1px solid rgba(100,255,150,0.4);border-radius:8px;">
+        <div style="font-size:0.9em;color:#66ffaa;font-weight:700;">🧚 모두 주인공에게 자동 흡수!</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // 3초 후 자동 닫기
+    setTimeout(() => {
+      overlay.remove();
+      this.render();
+    }, 3000);
+
+    showToast(`🌟 ${summoned.length}마리 자동 흡수 완료!`);
   }
 
   // ── 펫 진화 (HeroCore 가챠 경유) ──
