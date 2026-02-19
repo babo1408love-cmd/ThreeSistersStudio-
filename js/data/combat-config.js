@@ -333,18 +333,18 @@ export const ENEMY_MOVEMENT_TYPE = {
 // 원거리: 주인공보다 약간 빠름 → 근거리: 주인공과 같은 속도
 // ====================================================
 export const ENEMY_SPEED_CONFIG = {
-  // 원거리 속도 배율 (플레이어 속도 대비) — 플레이어 speed=GameState 연동
-  farSpeedMultiplier: 1.6,        // 원거리: 플레이어의 160% (빠르게 접근)
+  // 원거리 속도 배율 (플레이어 속도 대비) — ★ 2배 적용
+  farSpeedMultiplier: 3.2,        // 원거리: 플레이어의 320% (빠르게 접근)
   // 근거리 속도 배율 (플레이어 속도 대비)
-  nearSpeedMultiplier: 1.1,       // 근거리: 플레이어의 110% (살짝 빠름)
+  nearSpeedMultiplier: 2.2,       // 근거리: 플레이어의 220%
   // 근접 판정 거리 (px) — 이 이내면 nearSpeed 적용
   proximityRadius: 80,
   // 원거리 판정 거리 (px) — 이 이상이면 farSpeed 적용
   farRadius: 300,
   // 보스 전용 오버라이드
   boss: {
-    farSpeedMultiplier: 1.4,      // 보스 원거리: 140% (묵직하게)
-    nearSpeedMultiplier: 1.0,     // 보스 근거리: 100% (동일 속도)
+    farSpeedMultiplier: 2.8,      // 보스 원거리: 280%
+    nearSpeedMultiplier: 2.0,     // 보스 근거리: 200%
     proximityRadius: 60,
     farRadius: 350,
   },
