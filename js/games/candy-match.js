@@ -1633,19 +1633,48 @@ export default class CandyMatch {
       // --- Rage Gauge fill ---
       this._addRageFromMatch(matchedKeys, this.comboCount);
 
-      // --- Phase 1: Explosion Animation ---
-      const matchedSet = new Set(matchedKeys);
-      this._updateBoardDOM({ exploding: matchedSet });
+      // --- Phase 1: 밑에서부터 매치 그룹 하나씩 폭발 + 콤보 카운트 ---
+      // 매치 그룹을 행 기준 내림차순 정렬 (밑 → 위)
+      const sortedGroups = [...matchGroups].sort((a, b) => {
+        const maxRowA = Math.max(...a.cells.map(c => c[0]));
+        const maxRowB = Math.max(...b.cells.map(c => c[0]));
+        return maxRowB - maxRowA;
+      });
+
+      const matchedSet = new Set();
+      let groupCombo = 0;
+
+      for (let gi = 0; gi < sortedGroups.length; gi++) {
+        if (this._destroyed) return;
+        const group = sortedGroups[gi];
+        groupCombo++;
+
+        // 이 그룹의 셀만 폭발
+        const groupKeys = new Set(group.cells.map(c => c[0] + ',' + c[1]));
+        for (const k of groupKeys) matchedSet.add(k);
+
+        this._updateBoardDOM({ exploding: groupKeys });
+
+        // 콤보 카운트 표시
+        showComboText(`💥 ${groupCombo} COMBO`);
+
+        // 효과음 (콤보마다 피치 상승)
+        if (typeof SoundSFX !== 'undefined') {
+          if (SoundSFX.candyMatch) SoundSFX.candyMatch(groupCombo);
+          if (groupCombo >= 3 && SoundSFX.candyCombo) SoundSFX.candyCombo(groupCombo);
+        }
+
+        // 콤보 이펙트
+        if (groupCombo >= 2) {
+          this._showComboEffect(groupCombo);
+        }
+
+        // 그룹 간 딜레이 (콤보 높을수록 빨라짐)
+        const groupDelay = Math.max(80, 250 - groupCombo * 20);
+        await this._wait(groupDelay);
+      }
+
       showScoreFloat(totalPoints);
-      // 매치/콤보 효과음 (콤보마다 2반음 상승 + 화려해짐)
-      if (typeof SoundSFX !== 'undefined') {
-        if (SoundSFX.candyMatch) SoundSFX.candyMatch(this.comboCount);
-        if (this.comboCount >= 3 && SoundSFX.candyCombo) SoundSFX.candyCombo(this.comboCount);
-      }
-      // 🎆 콤보 시각 이펙트 (2콤보부터, 콤보 높을수록 화려)
-      if (this.comboCount >= 2) {
-        this._showComboEffect(this.comboCount);
-      }
 
       // --- 매치 단계 연출 (tier 2+) ---
       if (bestTier && bestTier.tier >= 2) {
@@ -1653,9 +1682,9 @@ export default class CandyMatch {
         if (this._helperActive) this._helperMsg = MOTHER_OF_WORLD.dialogues.bigMatch;
       }
 
-      // 콤보 속도 계수 — 1콤보=느긋, 콤보 쌓일수록 점점 빨라짐 (정지 없음)
+      // 콤보 속도 계수
       const cSpd = Math.max(0.15, 1.2 - (this.comboCount - 1) * 0.1);
-      await this._wait(Math.round((bestTier && bestTier.tier >= 3 ? 650 : 520) * cSpd));
+      await this._wait(Math.round((bestTier && bestTier.tier >= 3 ? 400 : 280) * cSpd));
 
       // --- 매치 시 정령 파츠 드랍 (표시만, 캔디 진행 안 멈춤) ---
       if (bestTier && MATCH_SPIRIT_DROP.enabled) {
