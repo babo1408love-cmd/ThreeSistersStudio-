@@ -164,3 +164,42 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+
+// ── 디버그/치트 유틸 (콘솔에서 호출) ──
+window.cheat = {
+  /** 정령 10마리 즉시 소환: cheat.summon10() */
+  summon10() {
+    const CHEAT_SPIRITS = [
+      { key:'fairy',    name:'빛의 요정',    emoji:'🧚', rarity:'common',    attribute:'light',     rarityId:1, stats:{attack:8,defense:3,speed:5},  ability:{name:'빛의 축복',type:'heal',value:20,cooldown:8000,description:'아군 체력 20 회복'},   defense:3, spiritAtk:8,  spiritAtkSpeed:2.0 },
+      { key:'mushroom', name:'독버섯 정령',  emoji:'🍄', rarity:'common',    attribute:'nature',    rarityId:1, stats:{attack:12,defense:6,speed:3}, ability:{name:'독 포자',type:'aoe',value:15,radius:80,cooldown:6000,description:'주변 적에게 15 피해'}, defense:6, spiritAtk:12, spiritAtkSpeed:2.0 },
+      { key:'water',    name:'물방울 정령',  emoji:'💧', rarity:'common',    attribute:'water',     rarityId:1, stats:{attack:10,defense:8,speed:4}, ability:{name:'물결 파동',type:'aoe',value:12,radius:100,cooldown:7000,description:'주변 적에게 12 피해 + 감속'}, defense:8, spiritAtk:10, spiritAtkSpeed:2.0 },
+      { key:'diamond',  name:'다이아 수호자',emoji:'💎', rarity:'rare',      attribute:'ice',       rarityId:2, stats:{attack:6,defense:15,speed:2}, ability:{name:'수정 방어막',type:'shield',value:30,cooldown:10000,description:'아군에게 방어막 30 부여'}, defense:10,spiritAtk:12, spiritAtkSpeed:1.8 },
+      { key:'star',     name:'별빛 마법사',  emoji:'⭐', rarity:'rare',      attribute:'light',     rarityId:2, stats:{attack:18,defense:4,speed:4}, ability:{name:'유성우',type:'aoe',value:25,radius:120,cooldown:12000,description:'넓은 범위에 25 피해'}, defense:8, spiritAtk:18, spiritAtkSpeed:1.8 },
+      { key:'moon',     name:'달빛 암살자',  emoji:'🌙', rarity:'rare',      attribute:'dark',      rarityId:2, stats:{attack:22,defense:3,speed:8}, ability:{name:'그림자 일격',type:'single',value:40,cooldown:8000,description:'단일 대상 40 피해'}, defense:6, spiritAtk:22, spiritAtkSpeed:1.6 },
+      { key:'thunder',  name:'번개 정령',    emoji:'⚡', rarity:'magic',     attribute:'lightning',  rarityId:3, stats:{attack:24,defense:8,speed:7}, ability:{name:'천둥벼락',type:'aoe',value:30,radius:110,cooldown:9000,description:'광역 30 피해 + 마비'}, defense:12,spiritAtk:24, spiritAtkSpeed:1.5 },
+      { key:'fire',     name:'불꽃 피닉스',  emoji:'🔥', rarity:'epic',      attribute:'fire',      rarityId:3, stats:{attack:32,defense:10,speed:5},ability:{name:'화염 폭발',type:'aoe',value:55,radius:120,cooldown:14000,description:'대폭발 55 피해'}, defense:14,spiritAtk:32, spiritAtkSpeed:1.3 },
+      { key:'ice',      name:'얼음 여왕',    emoji:'❄️', rarity:'epic',      attribute:'ice',       rarityId:3, stats:{attack:25,defense:18,speed:3},ability:{name:'빙결',type:'freeze',value:35,radius:100,cooldown:12000,description:'주변 적 동결 + 35 피해'}, defense:18,spiritAtk:25, spiritAtkSpeed:1.3 },
+      { key:'rainbow',  name:'무지개 드래곤',emoji:'🌈', rarity:'epic',      attribute:'light',     rarityId:3, stats:{attack:28,defense:14,speed:6},ability:{name:'무지개 브레스',type:'beam',value:50,cooldown:10000,description:'직선 관통 50 피해'}, defense:14,spiritAtk:28, spiritAtkSpeed:1.3 },
+    ];
+    const max = GameState.MAX_SPIRITS || 10;
+    const remaining = max - GameState.spirits.length;
+    if (remaining <= 0) { console.log('정령이 이미 가득 찼습니다!'); return; }
+    const toAdd = Math.min(remaining, CHEAT_SPIRITS.length);
+    for (let i = 0; i < toAdd; i++) {
+      const s = { ...CHEAT_SPIRITS[i], id: Date.now() + i, level: 1, exp: 0 };
+      GameState.summonSpirit(s);
+    }
+    SaveManager.save();
+    console.log(`✨ 정령 ${toAdd}마리 소환 완료! (${GameState.spirits.length}/${max})`);
+    console.log(GameState.spirits.map(s => `${s.emoji} ${s.name} (${s.rarity})`).join('\n'));
+  },
+  /** 골드 추가: cheat.gold(10000) */
+  gold(amount = 10000) { GameState.addGold(amount); SaveManager.save(); console.log(`+${amount}G → 총 ${GameState.gold}G`); },
+  /** 조각 60개 추가: cheat.fragments() */
+  fragments(count = 60) {
+    for (let i = 0; i < count; i++) {
+      GameState.spiritItems.push({ id: Date.now() + i, name: '치트 조각', emoji: '✨', type: 'spirit_part', part: ['head','body','wings','legs','aura','core'][i%6], rarity: 'common', spiritKey: 'fairy' });
+    }
+    SaveManager.save(); console.log(`조각 ${count}개 추가! 총 ${GameState.spiritItems.length}개`);
+  },
+};
