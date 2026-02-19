@@ -273,9 +273,10 @@ export default class HeroCore {
     }
 
     // ── 전투 시스템 마운트 ──
-    // 분노 시스템
+    // 분노 시스템 (전투 시작 시 게이지 0으로 리셋)
+    GameState.rageGauge = 0;
     this.systems.rage = new RageSystem({
-      initialGauge: GameState.rageGauge || 0,
+      initialGauge: 0,
       maxTriggers: RageSystem.resolveMaxTriggers(GameState),
       gainRate: (GameState.player.rageGainRate || 100) / 100,
     });
