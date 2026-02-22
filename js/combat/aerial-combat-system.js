@@ -148,6 +148,7 @@ export { BOOSTER_CONFIG };
 
 export default class AerialCombatSystem {
   constructor(engine) {
+    this.alwaysActive = true;
     this.engine = engine;
     this.phase = AERIAL_PHASE.INACTIVE;
     this.phaseTimer = 0;
@@ -563,4 +564,23 @@ export default class AerialCombatSystem {
     ctx.globalAlpha = 1;
     ctx.restore();
   }
+}
+
+/**
+ * FormulaPack4 연동: 공중전 부스터 스케일링
+ * 기존 고정값: speedMult=3.0, atkMult=2.5, interval=150
+ */
+export function getScaledAerialBooster(stageLevel, playerSpeed, playerATK) {
+  if (typeof FormulaPack4 !== 'undefined') {
+    return FormulaPack4.getAerialBooster(stageLevel, playerSpeed, playerATK);
+  }
+  // 기존 고정값 (폴백)
+  // speedMult=3.0, atkMult=2.5, interval=150
+  return {
+    speedMultiplier: 3.0,
+    attackMultiplier: 2.5,
+    autoAttackInterval: 150,
+    effectiveSpeed: playerSpeed * 3.0,
+    effectiveATK: Math.round(playerATK * 2.5),
+  };
 }

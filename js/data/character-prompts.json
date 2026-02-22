@@ -1,0 +1,124 @@
+{
+  "version": "1.0",
+  "description": "몽클벨 캐릭터 생성 프롬프트 DB — 기존프롬프트.txt 기반",
+  "master_style": "3D render based 2D mobile game character, volumetric shading, dimensional hair with volume, clear defined light source, vivid color contrast, masterpiece, best quality, adorable cute character, full body shot, front view, neutral standing pose, arms relaxed at sides, no dynamic pose, simple idle stance, front view and back view reference style, character design sheet feel, head:body ratio exactly 30:70, 3.3 heads tall proportions, ALL curves, zero angular shapes, zero sharp edges, 100% rounded silhouette, large expressive eyes, clean white background, full body visible head to toe, IMPORTANT: show FRONT VIEW and BACK VIEW clearly, character turnaround feel, mobile game quality render, ultra detailed",
+
+  "element_themes": {
+    "불": {
+      "colors": "warm red-orange theme 60%, gold accent 25%, deep crimson 15%",
+      "effects": "fiery glow, flame particles, ember wisps around character",
+      "hair": "bright orange-red hair with golden highlights, flame-like flowing style",
+      "eyes": "bright amber eyes with inner fire glow, warm orange iris"
+    },
+    "물": {
+      "colors": "ocean blue theme 60%, pearl white 25%, seafoam green 15%",
+      "effects": "water droplet sparkles, gentle wave aura, bubble particles",
+      "hair": "deep blue-teal hair with pearl white highlights, flowing wavy style",
+      "eyes": "clear ocean blue eyes with water ripple highlight, serene expression"
+    },
+    "풀": {
+      "colors": "forest green theme 60%, light yellow-green 25%, brown earth 15%",
+      "effects": "leaf particles, vine decorations, nature petal aura",
+      "hair": "rich green hair with golden-green highlights, adorned with small flowers",
+      "eyes": "bright emerald green eyes, gentle and warm expression"
+    },
+    "번개": {
+      "colors": "electric yellow theme 60%, white 25%, sky blue 15%",
+      "effects": "spark glow, lightning bolt accessories, electric shimmer",
+      "hair": "bright yellow with white lightning streak highlights, spiky energy style",
+      "eyes": "vivid electric yellow eyes with spark highlights, energetic expression"
+    },
+    "빛": {
+      "colors": "pure white theme 60%, gold 30%, soft pink 10%",
+      "effects": "radiant halo, star sparkle, divine glow aura",
+      "hair": "soft pink hair with pearl white-pink highlights, dimensional volumetric style",
+      "eyes": "warm brown eyes, clear pure translucent serene, 3-layer gradient iris"
+    },
+    "어둠": {
+      "colors": "deep purple theme 60%, midnight black 25%, silver 15%",
+      "effects": "shadow mist, dark star particles, mystic rune glow",
+      "hair": "deep violet-black hair with silver highlights, mysterious flowing style",
+      "eyes": "deep purple eyes with silver star highlight, mysterious calm expression"
+    },
+    "얼음": {
+      "colors": "crystal blue theme 60%, pure white 30%, silver 10%",
+      "effects": "frost crystalline sparkle, snowflake particles, ice shard aura",
+      "hair": "icy blue-white hair with crystal highlights, elegant style with frozen wisps",
+      "eyes": "crystal clear ice-blue eyes, cool and serene expression"
+    },
+    "바람": {
+      "colors": "sky blue theme 60%, cloud white 30%, soft green 10%",
+      "effects": "wind swirl, cloud wisps, feather particles",
+      "hair": "light sky blue hair with white cloud highlights, freely flowing windswept style",
+      "eyes": "clear sky blue eyes with soft cloud highlight, free-spirited expression"
+    }
+  },
+
+  "character_types": {
+    "정령": {
+      "description": "작고 귀여운 정령. 주인공의 친구이자 동료.",
+      "size_note": "small fairy-sized creature, compact cute body",
+      "extra": "fairy wings or elemental wings, cute tiny accessories"
+    },
+    "요정영웅": {
+      "description": "주인공 요정. 용감하고 귀여운 소녀.",
+      "size_note": "slightly larger than spirits, hero proportions",
+      "extra": "hero outfit with elemental theme, weapon or wand, determined expression"
+    },
+    "펫": {
+      "description": "동반자 펫. 슬라임이나 동물형.",
+      "size_note": "small round cute creature, very chubby",
+      "extra": "extremely chubby round body, tiny legs, big eyes, simplified design"
+    },
+    "NPC": {
+      "description": "마을 NPC. 친근하고 개성있는 캐릭터.",
+      "size_note": "normal game character proportions",
+      "extra": "unique occupation outfit, friendly expression, distinctive feature"
+    }
+  },
+
+  "rarity_modifiers": {
+    "Common": "simple clean design, basic accessories, 1-2 color theme",
+    "Rare": "refined design, decorative accessories, slightly glowing effect",
+    "Epic": "elaborate design, glowing accessories, 2-3 color gradient theme, aura visible",
+    "Legendary": "magnificent design, powerful glowing aura, complex decorations, ethereal quality",
+    "Mythic": "divine celestial design, overwhelming radiant aura, golden/rainbow theme, otherworldly beauty"
+  },
+
+  "prompt_template": "{{master_style}}, {{character_type_note}}, {{element_colors}}, {{element_effects}}, {{element_hair}}, {{element_eyes}}, {{rarity_modifier}}, soft pink blush under eyes, gentle happy expression, {{custom_traits}}",
+
+  "example_characters": [
+    {
+      "name": "로제",
+      "element": "빛",
+      "type": "요정영웅",
+      "rarity": "Epic",
+      "traits": "main heroine, brave yet gentle, pink ribbon in hair",
+      "notes": "몽클벨 주인공"
+    },
+    {
+      "name": "이슬",
+      "element": "물",
+      "type": "정령",
+      "rarity": "Rare",
+      "traits": "water spirit, shy and gentle, tear-drop shaped accessories",
+      "notes": "첫 번째 정령"
+    },
+    {
+      "name": "화르르",
+      "element": "불",
+      "type": "정령",
+      "rarity": "Rare",
+      "traits": "fire spirit, energetic and cheerful, flame crown",
+      "notes": "불 속성 정령"
+    },
+    {
+      "name": "가이아",
+      "element": "풀",
+      "type": "NPC",
+      "rarity": "Legendary",
+      "traits": "world mother, ancient wisdom, nature goddess appearance, flower crown",
+      "notes": "세계의 어머니 NPC — 초보자 도우미"
+    }
+  ]
+}

@@ -1,0 +1,462 @@
+/* ── 공통 페이지 스타일 (모든 씬 통합) ── */
+
+/* ── Page Container ── */
+.pg {
+  padding: 10px 8px;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+/* ── Header ── */
+.pg-hdr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  background: rgba(10,10,30,0.6);
+  border: 1px solid rgba(192,132,252,0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.pg-hdr h2 {
+  flex: 1;
+  text-align: center;
+  font-size: clamp(14px, 4.2vw, 18px);
+  color: var(--text-primary);
+  margin: 0;
+  font-weight: 700;
+}
+
+.pg-back {
+  background: rgba(155,138,255,0.15);
+  border: 1px solid rgba(155,138,255,0.3);
+  color: var(--blue);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: var(--label-md);
+  cursor: pointer;
+  font-family: var(--font-main);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.pg-back:hover { background: rgba(155,138,255,0.25); }
+.pg-back:active { transform: scale(0.95); }
+
+.pg-info {
+  font-size: var(--label-md);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pg-wallet {
+  font-size: var(--label-md);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Tabs ── */
+.pg-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.pg-tab {
+  flex: 1;
+  padding: 7px 4px;
+  text-align: center;
+  font-size: var(--label-md);
+  background: rgba(10,10,30,0.5);
+  border: 1px solid rgba(192,132,252,0.15);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-main);
+  transition: all 0.2s;
+}
+
+.pg-tab.active {
+  background: rgba(192,132,252,0.15);
+  border-color: rgba(192,132,252,0.4);
+  color: var(--purple);
+}
+
+.pg-tab:hover:not(.active) {
+  background: rgba(192,132,252,0.08);
+}
+
+/* ── Section Title ── */
+.pg-section {
+  font-size: clamp(11px, 3.2vw, 15px);
+  color: var(--text-secondary);
+  margin: 10px 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(192,132,252,0.15);
+}
+
+/* ── List ── */
+.pg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Card ── */
+.pg-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(10,10,30,0.5);
+  border: 1px solid rgba(192,132,252,0.12);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pg-card:hover {
+  background: rgba(20,20,50,0.7);
+  border-color: rgba(245,194,231,0.3);
+}
+
+.pg-card-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.pg-card-accent {
+  border-color: rgba(251,191,36,0.3);
+}
+
+.pg-card-premium {
+  border-color: rgba(192,132,252,0.4);
+  background: rgba(192,132,252,0.06);
+}
+
+.pg-card-gold {
+  border-color: rgba(251,191,36,0.4);
+  background: rgba(251,191,36,0.05);
+}
+
+.pg-emoji { font-size: var(--icon-lg); flex-shrink: 0; }
+.pg-card-info { flex: 1; min-width: 0; }
+.pg-card-name { font-size: clamp(11px, 3.2vw, 15px); color: var(--text-primary); font-weight: 600; }
+.pg-card-sub { font-size: var(--label-xs); color: var(--text-muted); font-weight: normal; }
+.pg-card-desc { font-size: var(--label-md); color: var(--text-secondary); margin-top: 2px; }
+.pg-card-badge { font-size: var(--label-md); color: var(--gold); white-space: nowrap; }
+.pg-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+/* ── Grid ── */
+.pg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.pg-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.pg-grid-item {
+  background: rgba(10,10,30,0.5);
+  border: 1px solid rgba(192,132,252,0.12);
+  border-radius: 12px;
+  padding: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pg-grid-item:hover {
+  background: rgba(20,20,50,0.7);
+  border-color: rgba(245,194,231,0.3);
+}
+
+.pg-grid-item-dim { opacity: 0.3; cursor: default; }
+.pg-grid-emoji { font-size: var(--icon-xl); }
+.pg-grid-name { font-size: var(--label-md); color: var(--text-secondary); margin-top: 3px; }
+.pg-grid-price { font-size: var(--label-md); color: var(--gold); margin-top: 2px; }
+
+/* ── Stats Row ── */
+.pg-stat-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.pg-stat {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  background: rgba(10,10,30,0.5);
+  border: 1px solid rgba(192,132,252,0.12);
+  border-radius: 10px;
+}
+
+.pg-stat-label {
+  display: block;
+  font-size: var(--label-xs);
+  color: var(--text-secondary);
+}
+
+.pg-stat-value {
+  display: block;
+  font-size: clamp(13px, 3.8vw, 17px);
+  color: var(--gold);
+  margin-top: 3px;
+  font-weight: 700;
+}
+
+/* ── Progress Bar ── */
+.pg-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.pg-progress-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.pg-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--purple);
+  transition: width 0.4s;
+}
+
+.pg-progress-fill-green { background: var(--green); }
+.pg-progress-fill-gold { background: var(--gold); }
+
+.pg-progress-text {
+  font-size: var(--label-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Buttons ── */
+.pg-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: var(--label-md);
+  font-weight: 700;
+  font-family: var(--font-main);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pg-btn-pri {
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(192,132,252,0.2);
+}
+
+.pg-btn-pri:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(192,132,252,0.3);
+}
+
+.pg-btn-sec {
+  background: rgba(155,138,255,0.12);
+  color: var(--blue);
+  border: 1px solid rgba(155,138,255,0.25);
+}
+
+.pg-btn-sec:hover { background: rgba(155,138,255,0.2); }
+
+.pg-btn-full { width: 100%; margin-top: 8px; }
+
+/* ── Empty State ── */
+.pg-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 20px;
+  font-size: clamp(11px, 3.2vw, 15px);
+}
+
+/* ── Row (generic flex row) ── */
+.pg-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.pg-row-center {
+  justify-content: center;
+}
+
+/* ── Text Helpers ── */
+.pg-text-gold { color: var(--gold); }
+.pg-text-green { color: var(--green); }
+.pg-text-purple { color: var(--purple); }
+.pg-text-pink { color: var(--pink); }
+.pg-text-muted { color: var(--text-muted); }
+.pg-text-sm { font-size: var(--label-md); }
+.pg-text-center { text-align: center; }
+
+/* ── Banner (Gacha) ── */
+.pg-banner {
+  background: rgba(10,10,30,0.5);
+  border: 1px solid rgba(192,132,252,0.15);
+  border-radius: 12px;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.pg-banner-title { font-size: clamp(13px, 3.8vw, 17px); color: var(--text-primary); font-weight: 700; margin-bottom: 4px; }
+.pg-banner-desc { font-size: var(--label-md); color: var(--text-secondary); margin-bottom: 10px; }
+.pg-banner-btns { display: flex; gap: 8px; justify-content: center; }
+
+/* ── Ranking Row ── */
+.pg-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: rgba(10,10,30,0.4);
+  border-radius: 10px;
+  font-size: clamp(11px, 3.2vw, 15px);
+}
+
+.pg-rank-top { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.15); }
+.pg-rank-pos { width: 28px; text-align: center; font-size: clamp(13px, 3.8vw, 17px); }
+.pg-rank-name { flex: 1; color: var(--text-primary); }
+.pg-rank-score { color: var(--gold); font-weight: 600; }
+
+/* ── Worldmap Region ── */
+.pg-region {
+  background: rgba(10,10,30,0.5);
+  border: 2px solid var(--region-color, rgba(192,132,252,0.3));
+  border-radius: 12px;
+  padding: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pg-region:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--region-color, var(--purple)) 30%, transparent);
+}
+
+.pg-region-locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.8);
+}
+
+.pg-region-locked:hover { transform: none; box-shadow: none; }
+
+.pg-region-emoji { font-size: var(--icon-xl); text-align: center; margin-bottom: 4px; }
+.pg-region-name { font-size: clamp(11px, 3.2vw, 15px); font-weight: 700; color: var(--text-primary); text-align: center; }
+.pg-region-desc { font-size: var(--label-xs); color: var(--text-secondary); text-align: center; margin: 3px 0; line-height: 1.3; }
+.pg-region-stages { font-size: var(--label-xs); color: var(--text-muted); text-align: center; margin-top: 3px; }
+
+/* ── Stage List (Worldmap) ── */
+.pg-stage {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(10,10,30,0.4);
+  border-radius: 8px;
+  font-size: clamp(11px, 3.2vw, 15px);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pg-stage:hover:not(.pg-stage-locked) { background: rgba(20,20,50,0.6); }
+.pg-stage-cleared { color: var(--green); }
+.pg-stage-current { color: var(--gold); border: 1px solid rgba(251,191,36,0.4); }
+.pg-stage-locked { color: var(--text-muted); cursor: not-allowed; }
+
+/* ── Game Over ── */
+.pg-gameover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  height: 100%;
+  animation: fadeIn 0.5s ease-out;
+}
+
+.pg-gameover-icon { font-size: var(--icon-hero); margin-bottom: 16px; }
+.pg-gameover-title { font-size: clamp(18px, 5vw, 22px); font-weight: 900; margin-bottom: 6px; }
+.pg-gameover-desc { font-size: clamp(11px, 3.2vw, 15px); color: var(--text-secondary); line-height: 1.5; margin-bottom: 16px; }
+
+.pg-gameover-stats {
+  width: 100%;
+  max-width: 280px;
+  background: rgba(10,10,30,0.6);
+  border: 1px solid rgba(192,132,252,0.2);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.pg-gameover-stats-title {
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 8px;
+  font-size: var(--label-lg);
+}
+
+.pg-gameover-stats-body {
+  font-size: clamp(11px, 3.2vw, 15px);
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+/* ── Quest Item ── */
+.pg-quest-done { opacity: 0.45; }
+.pg-quest-status { font-size: clamp(14px, 4vw, 18px); flex-shrink: 0; }
+
+/* ── Gacha Result ── */
+.pg-gacha-result {
+  margin-top: 10px;
+  padding: 12px;
+  background: rgba(10,10,30,0.5);
+  border: 1px solid rgba(192,132,252,0.15);
+  border-radius: 12px;
+  display: none;
+  text-align: center;
+}
+
+.pg-gacha-result.show { display: block; }
+
+.pg-gacha-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  font-size: var(--label-md);
+}
+
+.pg-gacha-common { background: rgba(150,150,150,0.15); }
+.pg-gacha-rare { background: rgba(155,138,255,0.2); }
+.pg-gacha-epic { background: rgba(192,132,252,0.25); border: 1px solid rgba(192,132,252,0.4); }
+.pg-gacha-legendary { background: rgba(251,191,36,0.2); border: 1px solid var(--gold); }
+.pg-gacha-mythic { background: rgba(255,107,107,0.2); border: 1px solid var(--red); }
+.pg-gacha-item-emoji { font-size: var(--icon-lg); }
+.pg-gacha-item-name { font-size: var(--label-xs); color: var(--text-secondary); margin-top: 2px; }
+
+.pg-pity { text-align: center; font-size: var(--label-md); color: var(--text-muted); margin: 8px 0; }

@@ -58,9 +58,9 @@ export default class StageDirector {
 
     // ── 맵 설정 ──
     const mapTheme = stage.mapTheme || region.mapTheme || 'fairy_garden';
-    // ★ 절반 거리 맵 (3분 동안 ~35,000px 스크롤)
-    const scrollSpeed = 0.3 + stageLevel * 0.01;
-    const scrollAccel = 0.00003 + stageLevel * 0.000001;
+    // ★ 느린 전진 (기존의 절반 속도)
+    const scrollSpeed = (0.3 + stageLevel * 0.01) * 0.5;
+    const scrollAccel = (0.00003 + stageLevel * 0.000001) * 0.5;
     const density = THEME_DENSITY[mapTheme] || THEME_DENSITY.fairy_garden;
 
     // 스테이지 진행에 따라 밀도 조정 (후반 스테이지 = 더 복잡한 지형)
@@ -79,9 +79,18 @@ export default class StageDirector {
     // 몬스터 스탯 스케일링
     const baseHp = 40 + regionIdx * 30;
     const baseAtk = 5 + regionIdx * 4;
-    const scaleFactor = 1 + (stageNum - 1) * 0.12;
-    const mobHp = Math.round(baseHp * scaleFactor);
-    const mobAtk = Math.round(baseAtk * scaleFactor);
+    // const scaleFactor = 1 + (stageNum - 1) * 0.12;
+    const scaleFactor = typeof FormulaPack3 !== 'undefined'
+      ? FormulaPack3.getStageScaleFactor(stageLevel, 'hp')
+      : 1 + (stageNum - 1) * 0.12;
+    // const mobHp = Math.round(baseHp * scaleFactor);
+    // const mobAtk = Math.round(baseAtk * scaleFactor);
+    const mobHp = typeof FormulaPack3 !== 'undefined'
+      ? Math.round(baseHp * FormulaPack3.getStageScaleFactor(stageLevel, 'hp'))
+      : Math.round(baseHp * scaleFactor);
+    const mobAtk = typeof FormulaPack3 !== 'undefined'
+      ? Math.round(baseAtk * FormulaPack3.getStageScaleFactor(stageLevel, 'atk'))
+      : Math.round(baseAtk * scaleFactor);
 
     // ── 보스 결정 ──
     let bossType = null;

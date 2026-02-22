@@ -1,0 +1,63 @@
+/* Isometric 2.5D transforms */
+
+.iso-container {
+  perspective: 1000px;
+  perspective-origin: 50% 50%;
+}
+
+.iso-floor {
+  transform: rotateX(55deg) rotateZ(-45deg);
+  transform-style: preserve-3d;
+}
+
+.iso-tile {
+  transform-style: preserve-3d;
+  transition: transform var(--transition-fast);
+}
+
+.iso-tile:hover {
+  transform: translateZ(8px);
+}
+
+/* Depth layers */
+.depth-bg    { transform: translateZ(-20px) scale(1.02); }
+.depth-mid   { transform: translateZ(0); }
+.depth-front { transform: translateZ(20px); }
+
+/* Parallax subtle movement */
+.parallax-slow  { transition: transform 0.5s ease-out; }
+.parallax-fast  { transition: transform 0.3s ease-out; }
+
+/* Isometric grid helper */
+.iso-grid {
+  display: grid;
+  transform: rotateX(60deg) rotateZ(-45deg);
+  transform-style: preserve-3d;
+}
+
+/* Shadow under elevated elements */
+.iso-shadow {
+  position: relative;
+}
+
+.iso-shadow::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 10%;
+  width: 80%;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  filter: blur(4px);
+}
+
+/* Floating animation for isometric elements */
+.iso-float {
+  animation: isoFloat 3s ease-in-out infinite alternate;
+}
+
+@keyframes isoFloat {
+  0%   { transform: translateY(0) translateZ(0); }
+  100% { transform: translateY(-8px) translateZ(4px); }
+}

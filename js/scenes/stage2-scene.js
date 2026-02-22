@@ -17,6 +17,7 @@ export default class Stage2Scene {
     this._stage = getStage(GameState.currentStage);
     this._showingSummonTree = false;
     this._bossTest = params?.bossTest || false;
+    this._aerialTest = params?.aerialTest || false;
   }
 
   render() {
@@ -26,8 +27,8 @@ export default class Stage2Scene {
     // Canvas (full viewport)
     const canvas = document.createElement('canvas');
     canvas.className = 'combat-canvas';
-    canvas.width = Math.min(window.innerWidth, 900);
-    canvas.height = Math.min(window.innerHeight - 40, 600);
+    canvas.width = APP_W;
+    canvas.height = APP_H - 40;
     canvas.id = 'combat-canvas';
     this.el.appendChild(canvas);
 
@@ -82,6 +83,7 @@ export default class Stage2Scene {
       mapTheme: plan.map.themeId,
       plan,  // StageDirector 생성 계획 전달
       bossTest: this._bossTest,  // 보스전 테스트: 10초 타이머 + 즉시 보스 접근
+      aerialTest: this._aerialTest,  // 공중전 Phase2 테스트: 즉시 진입
       onVictory: (result) => this._onVictory(result),
       onDeath: () => this._onDeath(),
     });
@@ -135,7 +137,7 @@ export default class Stage2Scene {
     overlay.className = 'victory-overlay';
     overlay.innerHTML = `
       <div class="victory-overlay__title">🎉 승리!</div>
-      <div style="color:var(--text-secondary);font-size:1em;">
+      <div style="color:var(--text-secondary);font-size:clamp(12px,3.2vw,15px);">
         스테이지 ${GameState.currentStage}: ${this._stage.name} 클리어!
       </div>
       <div class="victory-stats">
@@ -146,9 +148,9 @@ export default class Stage2Scene {
       </div>
       ${consumedCount > 0 ? `
         <div style="margin-top:12px;padding:8px 12px;background:rgba(255,200,100,0.12);border:1px solid rgba(255,200,100,0.3);border-radius:8px;max-width:360px;">
-          <div style="font-size:0.85em;color:#ffcc66;font-weight:700;">🌳 정령 ${consumedCount}마리 소환의 나무로 귀환</div>
-          <div style="font-size:0.75em;color:var(--text-muted);margin-top:4px;">${consumedList}</div>
-          <div style="font-size:0.7em;color:var(--text-muted);margin-top:2px;">다음 스테이지에서 새로 소환하세요!</div>
+          <div style="font-size:var(--label-md);color:#ffcc66;font-weight:700;">🌳 정령 ${consumedCount}마리 소환의 나무로 귀환</div>
+          <div style="font-size:var(--label-sm);color:var(--text-muted);margin-top:4px;">${consumedList}</div>
+          <div style="font-size:var(--label-sm);color:var(--text-muted);margin-top:2px;">다음 스테이지에서 새로 소환하세요!</div>
         </div>
       ` : ''}
       <div style="margin-top:20px;display:flex;gap:8px;">
@@ -180,7 +182,7 @@ export default class Stage2Scene {
     overlay.className = 'death-overlay';
     overlay.innerHTML = `
       <div class="death-overlay__title">🌳 소환의 나무로 귀환...</div>
-      <div style="color:var(--text-secondary);font-size:1em;margin-top:8px;">
+      <div style="color:var(--text-secondary);font-size:clamp(12px,3.2vw,15px);margin-top:8px;">
         요정은 쓰러지지 않아요. 소환의 나무에서 다시 시작합니다
       </div>
       <div style="margin-top:20px;display:flex;gap:8px;">
@@ -256,14 +258,14 @@ export default class Stage2Scene {
   _renderSpiritList() {
     const spirits = GameState.spirits;
     if (!spirits || spirits.length === 0) {
-      return '<div style="color:var(--text-muted);font-size:0.85em;">소환된 정령이 없습니다</div>';
+      return '<div style="color:var(--text-muted);font-size:var(--label-md);">소환된 정령이 없습니다</div>';
     }
     return spirits.map(s => `
       <div class="summon-spirit-card">
-        <span style="font-size:1.5em;">${s.emoji || '✨'}</span>
+        <span style="font-size:var(--icon-md);">${s.emoji || '✨'}</span>
         <div>
           <div style="font-weight:700;">${s.name || '정령'}</div>
-          <div style="font-size:0.8em;color:var(--text-secondary);">Lv.${s.level || 1} | ${s.attribute || '?'}</div>
+          <div style="font-size:var(--label-md);color:var(--text-secondary);">Lv.${s.level || 1} | ${s.attribute || '?'}</div>
         </div>
       </div>
     `).join('');
@@ -276,9 +278,9 @@ export default class Stage2Scene {
     // TODO: integrate with SummonTree instance when connected
     return parts.map(p => `
       <div class="fragment-cell">
-        <span style="font-size:1.3em;">${partEmoji[p]}</span>
-        <span style="font-size:0.75em;">${partName[p]}</span>
-        <span style="font-size:0.7em;color:var(--text-muted);">0개</span>
+        <span style="font-size:clamp(15px,4.5vw,20px);">${partEmoji[p]}</span>
+        <span style="font-size:var(--label-sm);">${partName[p]}</span>
+        <span style="font-size:var(--label-sm);color:var(--text-muted);">0개</span>
       </div>
     `).join('');
   }

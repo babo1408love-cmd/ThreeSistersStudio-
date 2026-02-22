@@ -1,0 +1,23 @@
+# 무거운 폴더 제외
+node_modules/
+backups/
+
+# 시크릿 파일 절대 올리지 않기
+.env
+*.env
+키번호.txt
+auth.json
+
+# 테스트 이미지 (임시)
+test-*.png
+
+# 임시 백업 파일
+*.backup
+*.backup2
+*.backup3
+*.backup4
+
+# OS 파일
+.DS_Store
+Thumbs.db
+desktop.ini
